@@ -44,7 +44,7 @@ export default function Home() {
             width: clampBuilder(350, 768, 20, 40),
             height: clampBuilder(350, 768, 20, 40),
           }}
-          className="absolute left-1/2 -translate-y-[80%] -translate-x-1/2 [mask-image:radial-gradient(ellipse_at_center,white,transparent)] -z-10"
+          className="absolute left-1/2 -translate-y-[80%] -translate-x-1/2 [mask-image:radial-gradient(ellipse_at_center,white,transparent)] -z-10 overflow-hidden"
         >
           <GridPattern />
         </div>
