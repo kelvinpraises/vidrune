@@ -1,15 +1,15 @@
 "use client";
 
+import { motion } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
 import Image from "next/image";
+import { useState } from "react";
 
 import GridPattern from "@/components/atoms/grid-pattern";
 import { PlaceholdersAndVanishInput } from "@/components/atoms/query-input";
 import { Tabs, TabsContent } from "@/components/atoms/tabs";
+import SceneResultCards from "@/components/organisms/scene-result-cards";
 import clampBuilder from "@/utils/clamp-builder";
-import { useState } from "react";
-import { motion } from "framer-motion";
-import { ExpandableCard } from "@/components/organisms/expandable-cards";
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState("home");
@@ -95,7 +95,7 @@ export default function Home() {
             Go back
           </button>
           <div className="">Your search results here.</div>
-          <ExpandableCard cards={cards} defaultLayout="grid" />
+          <SceneResultCards cards={cards} defaultLayout="grid" />
         </div>
       </TabsContent>
     </Tabs>
