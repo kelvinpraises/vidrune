@@ -1,6 +1,7 @@
 "use client";
 
 import { useModal } from "connectkit";
+import { useCallback } from "react";
 import {
   useAccount,
   useConnect as useConnect$1,
@@ -18,8 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/atoms/dropdown-menu";
 import { useMounted } from "@/hooks/use-mounted";
-import { ellipsisAddress } from "@/utils";
-import { useCallback } from "react";
+import { cn, ellipsisAddress } from "@/utils";
 
 export function UserNav() {
   const { address, isConnected, chainId, chain } = useAccount();
@@ -38,13 +38,15 @@ export function UserNav() {
     reset();
   }, [disconnect, reset, setOpen]);
 
-  if (!isMounted) return null;
-
   if (!isConnected && !address) {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="bg-[#33CB82] hover:bg-[#33CB82]/80 font-medium px-6 rounded-[0] py-4 transition-colors duration-200"
+        disabled={!isMounted}
+        className={cn(
+          "bg-[#33CB82] hover:bg-[#33CB82]/80 font-medium px-6 rounded-[0] py-4 transition-colors duration-200",
+          !isMounted && "opacity-20 cursor-not-allowed"
+        )}
       >
         Connect Wallet
       </button>
