@@ -76,7 +76,9 @@ export function ExpandableCard({
             <button
               onClick={() => setLayout("grid")}
               className={`p-2 rounded ${
-                layout === "grid" ? "bg-black text-white" : "hover:bg-gray-100"
+                layout === "grid"
+                  ? "bg-black/80 dark:bg-white text-white dark:text-black"
+                  : "hover:bg-gray-200 dark:hover:bg-gray-800"
               }`}
             >
               <Grid2X2 className="h-4 w-4" />
@@ -84,7 +86,9 @@ export function ExpandableCard({
             <button
               onClick={() => setLayout("list")}
               className={`p-2 rounded ${
-                layout === "list" ? "bg-black text-white" : "hover:bg-gray-100"
+                layout === "list"
+                  ? "bg-black/80 dark:bg-white text-white dark:text-black"
+                  : "hover:bg-gray-200 dark:hover:bg-gray-800"
               }`}
             >
               <List className="h-4 w-4" />
@@ -130,7 +134,7 @@ export function ExpandableCard({
               <motion.div
                 layoutId={`card-${active.title}-${id}`}
                 ref={ref}
-                className="w-full max-w-[500px]  h-full md:h-fit md:max-h-[90%]  flex flex-col bg-white dark:bg-neutral-900 sm:rounded-3xl overflow-hidden"
+                className="w-full max-w-[500px]  h-full md:h-fit md:max-h-[90%]  flex flex-col bg-white dark:bg-gray-800 sm:rounded-3xl overflow-hidden"
               >
                 <motion.div layoutId={`image-${active.title}-${id}`}>
                   <Image
@@ -200,7 +204,7 @@ export function ExpandableCard({
               onClick={() => setActive(card)}
               className={`p-4 flex ${
                 layout === "grid" ? "flex-col" : "flex-row items-center"
-              } hover:bg-neutral-50 dark:hover:bg-neutral-800 rounded-xl cursor-pointer`}
+              } hover:bg-neutral-50 dark:hover:bg-gray-800/50 rounded-xl cursor-pointer`}
             >
               <motion.div
                 layoutId={`image-${card.title}-${id}`}
