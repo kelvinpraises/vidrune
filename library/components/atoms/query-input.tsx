@@ -250,7 +250,7 @@ export function PlaceholdersAndVanishInput({
         <button
           disabled={!value || disabled}
           type="submit"
-          className="absolute right-2 top-1/2 z-51 -translate-y-1/2 disabled:bg-gray-100 bg-[#33CB82] disabled:bg-[#33CB82]/20 font-medium px-6 rounded-sm py-4 transition duration-200 flex items-center justify-center "
+          className="absolute right-2 top-1/2 z-51 -translate-y-1/2 bg-[#33CB82] disabled:bg-[#33CB82]/20 font-medium px-6 rounded-sm py-4 transition duration-200 flex items-center justify-center"
         >
           start
         </button>
