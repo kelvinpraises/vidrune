@@ -34,6 +34,7 @@ export function PlaceholdersAndVanishInput({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const newDataRef = useRef<any[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+  const submitButtonRef = useRef<HTMLButtonElement>(null);
   const [value, setValue] = useState("");
   const [animating, setAnimating] = useState(false);
 
@@ -140,8 +141,7 @@ export function PlaceholdersAndVanishInput({
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !animating) {
-      vanishAndSubmit();
-      inputRef.current?.blur();
+      submitButtonRef.current?.click();
     }
   };
 
@@ -248,6 +248,7 @@ export function PlaceholdersAndVanishInput({
         />
 
         <button
+          ref={submitButtonRef}
           disabled={!value || disabled}
           type="submit"
           className="absolute right-2 top-1/2 z-51 -translate-y-1/2 bg-[#33CB82] disabled:bg-[#33CB82]/20 font-medium px-6 rounded-sm py-4 transition duration-200 flex items-center justify-center"
