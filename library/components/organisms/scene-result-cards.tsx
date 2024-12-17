@@ -16,15 +16,15 @@ interface Card {
   content: () => React.ReactNode;
 }
 
-interface ExpandableCardProps {
+interface SceneResultCardsProps {
   cards: Card[];
   defaultLayout?: "grid" | "list";
 }
 
-export function ExpandableCard({
+const SceneResultCards = ({
   cards,
   defaultLayout = "grid",
-}: ExpandableCardProps) {
+}: SceneResultCardsProps) => {
   const [active, setActive] = useState<Card | boolean | null>(null);
   const [layout, setLayout] = useState<"grid" | "list">(defaultLayout);
   const [search, setSearch] = useState("");
@@ -246,7 +246,7 @@ export function ExpandableCard({
       </div>
     </>
   );
-}
+};
 
 export const CloseIcon = () => {
   return (
@@ -280,3 +280,5 @@ export const CloseIcon = () => {
     </motion.svg>
   );
 };
+
+export default SceneResultCards;
