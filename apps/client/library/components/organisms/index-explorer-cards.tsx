@@ -210,7 +210,7 @@ const IndexExplorerCards = ({
                   <div className="space-y-1">
                     <motion.h3
                       layoutId={`title-${active.id}-${id}`}
-                      className="font-bold text-neutral-700 dark:text-neutral-200"
+                      className="font-display font-bold text-neutral-700 dark:text-neutral-200"
                     >
                       {active.title}
                     </motion.h3>
@@ -228,7 +228,7 @@ const IndexExplorerCards = ({
 
                   <button
                     onClick={handlePlayVideo}
-                    className="px-4 py-3 text-sm rounded-full font-bold bg-green-500 text-white"
+                    className="px-4 py-3 text-sm rounded-full font-mono font-bold bg-green-500 text-white"
                   >
                     Play
                   </button>
@@ -242,7 +242,7 @@ const IndexExplorerCards = ({
                     className="text-neutral-600 text-xs md:text-sm lg:text-base flex flex-col items-start gap-4 dark:text-neutral-400"
                   >
                     <div>
-                      <h4 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">
+                      <h4 className="font-display font-semibold text-neutral-800 dark:text-neutral-200 mb-2">
                         Summary
                       </h4>
                       <p>{active.summary}</p>
@@ -250,7 +250,7 @@ const IndexExplorerCards = ({
 
                     {active.scenes && active.scenes.length > 0 && (
                       <div className="w-full">
-                        <h4 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">
+                        <h4 className="font-display font-semibold text-neutral-800 dark:text-neutral-200 mb-2">
                           Scenes
                         </h4>
 
@@ -423,7 +423,7 @@ const IndexExplorerCards = ({
             >
               <motion.h3
                 layoutId={`title-${item.id}-${id}`}
-                className="font-medium text-neutral-800 dark:text-neutral-200 text-base"
+                className="font-display font-medium text-neutral-800 dark:text-neutral-200 text-base"
               >
                 {item.title}
               </motion.h3>
