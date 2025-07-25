@@ -54,7 +54,7 @@ export function ConnectButton() {
         onClick={handleConnect}
         disabled={!isMounted}
         className={cn(
-          "bg-[#33CB82] hover:bg-[#33CB82]/80 w-[18ch] flex items-center justify-center font-medium px-6 rounded-[0] py-4 transition-colors duration-200 whitespace-nowrap",
+          "bg-[#33CB82] hover:bg-[#33CB82]/80 w-[18ch] flex items-center justify-center font-bold px-6 rounded-[0] py-4 transition-colors duration-200 whitespace-nowrap",
           !isMounted && "opacity-20 cursor-not-allowed"
         )}
       >
