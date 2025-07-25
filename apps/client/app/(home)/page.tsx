@@ -45,7 +45,7 @@ export default function Home() {
       >
         <div className="flex flex-col items-center px-4 justify-between h-[80vh]">
           <div className="h-[25rem] flex flex-col justify-center items-center px-4 relative z-10">
-            <h2 className="mb-10 sm:mb-18 text-xl text-center sm:text-2xl dark:text-white text-black">
+            <h2 className="mb-6 sm:mb-10 text-xl text-center sm:text-2xl dark:text-white text-[#3C4043] font-source-code-pro font-semibold">
               Open compute. Open future. Unleashed insights.
             </h2>
             <div style={{ width: clampBuilder(350, 768, 20, 40) }}>
@@ -97,17 +97,17 @@ export default function Home() {
             <div className="flex items-center justify-between mb-8">
               <button
                 onClick={() => setActiveTab("home")}
-                className="flex items-center gap-2 px-4 py-3 text-sm font-medium bg-white dark:bg-[#1D1F21] text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-white border border-gray-200 dark:border-gray-800 rounded-sm"
+                className="flex items-center gap-2 px-4 py-3 text-sm font-mono font-medium bg-white dark:bg-[#1D1F21] text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-white border border-gray-200 dark:border-gray-800 rounded-sm"
               >
                 <ArrowLeft className="w-4 h-4" />
                 Go back
               </button>
-              
-              <h2 className="text-xl font-medium">
+
+              <h2 className="text-xl font-display font-medium">
                 Search results for: <span className="font-bold">{searchQuery}</span>
               </h2>
             </div>
-            
+
             {isSearching ? (
               <div className="space-y-4">
                 <div className="flex flex-col gap-4">
@@ -126,8 +126,8 @@ export default function Home() {
             ) : error ? (
               <div className="text-center py-10">
                 <p className="text-red-500">Error: {error}</p>
-                <button 
-                  className="mt-4 px-4 py-2 bg-green-500 text-white rounded-lg"
+                <button
+                  className="mt-4 px-4 py-2 bg-green-500 text-white rounded-lg font-mono"
                   onClick={() => search(searchQuery)}
                 >
                   Try Again
@@ -135,19 +135,21 @@ export default function Home() {
               </div>
             ) : results.length === 0 ? (
               <div className="text-center py-16">
-                <h3 className="text-xl font-medium mb-4">No results found</h3>
-                <p className="text-gray-500 mb-8">Try another search query or browse the explore section</p>
+                <h3 className="text-xl font-display font-medium mb-4">No results found</h3>
+                <p className="text-gray-500 mb-8">
+                  Try another search query or browse the explore section
+                </p>
                 <button
                   onClick={() => setActiveTab("home")}
-                  className="px-6 py-3 bg-green-500 text-white rounded-lg font-medium"
+                  className="px-6 py-3 bg-green-500 text-white rounded-lg font-mono font-medium"
                 >
                   Back to Search
                 </button>
               </div>
             ) : (
-              <IndexExplorerCards 
-                metadata={results.map(result => result.metadata).filter(Boolean) as any[]} 
-                defaultLayout="grid" 
+              <IndexExplorerCards
+                metadata={results.map((result) => result.metadata).filter(Boolean) as any[]}
+                defaultLayout="grid"
               />
             )}
           </div>

@@ -40,7 +40,7 @@ export default function RootLayout({
           <Link
             href="/console"
             className={
-              "bg-[#33CB82] hover:bg-[#33CB82]/80 w-[18ch] flex items-center justify-center font-medium px-6 rounded-[0] py-4 transition-colors duration-200 whitespace-nowrap"
+              "bg-[#33CB82] hover:bg-[#33CB82]/80 w-[18ch] flex items-center justify-center font-semibold px-6 rounded-[0] py-4 transition-colors duration-200 whitespace-nowrap"
             }
           >
             Index a Video
