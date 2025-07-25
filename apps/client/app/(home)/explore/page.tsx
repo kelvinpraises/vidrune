@@ -33,8 +33,8 @@ export default function Explore() {
       <div className="w-full max-w-6xl mx-auto mt-8">
         <Tabs defaultValue="explore" className="w-full">
           <TabsList className="grid w-full grid-cols-2 mb-8">
-            <TabsTrigger value="explore">Explore</TabsTrigger>
-            <TabsTrigger value="my-videos">My Indexed Videos</TabsTrigger>
+            <TabsTrigger value="explore" className="font-mono">Explore</TabsTrigger>
+            <TabsTrigger value="my-videos" className="font-mono">My Indexed Videos</TabsTrigger>
           </TabsList>
 
           <TabsContent value="explore" className="mt-4">
@@ -57,7 +57,7 @@ export default function Explore() {
               <div className="text-center py-10">
                 <p className="text-red-500">Error: {error}</p>
                 <button
-                  className="mt-4 px-4 py-2 bg-green-500 text-white rounded-lg"
+                  className="mt-4 px-4 py-2 bg-green-500 text-white rounded-lg font-mono"
                   onClick={() => window.location.reload()}
                 >
                   Try Again
