@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "canisters": {
+    "vidrune_assets": {
+      "type": "assets",
+      "source": ["apps/client/dist/"]
+    },
+    "vidrune_access_control": {
+      "type": "motoko",
+      "main": "apps/contracts/src/vidrune_access_control/main.mo"
+    },
+    "vi_token": {
+      "type": "custom",
+      "candid": "https://raw.githubusercontent.com/dfinity/ic/2e3589427cd9648d4edaebc1b96b5daf8fdd94d8/rs/rosetta-api/icrc1/ledger/ledger.did",
+      "wasm": "https://download.dfinity.systems/ic/2e3589427cd9648d4edaebc1b96b5daf8fdd94d8/canisters/ic-icrc1-ledger.wasm.gz"
+    }
+  },
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:4943",
+      "type": "ephemeral"
+    },
+    "ic": {
+      "providers": ["https://ic0.app"],
+      "type": "persistent"
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  }
+}
