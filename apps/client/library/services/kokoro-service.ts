@@ -20,6 +20,10 @@ export class KokoroService {
   private voices: KokoroVoices = {};
   private device: 'webgpu' | 'wasm' = 'wasm';
 
+  public getWorker(): Worker | null {
+    return this.worker;
+  }
+
   constructor() {
     this.initWorker();
   }

@@ -24,6 +24,10 @@ export class Florence2Service {
   private isModelLoaded = false;
   private isLoading = false;
 
+  public getWorker(): Worker | null {
+    return this.worker;
+  }
+
   constructor() {
     console.log("[Florence2 Service] Constructor called");
     this.initWorker();

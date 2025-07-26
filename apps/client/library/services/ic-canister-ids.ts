@@ -49,7 +49,7 @@ export async function getCanisterIds(): Promise<CanisterIds | null> {
       };
     }
 
-    // For local development, try to read from canister_ids.json
+    // For local development, read from canister_ids.json (required)
     const isLocal = !window.location.host.endsWith("ic0.app");
     if (isLocal) {
       try {
@@ -57,23 +57,33 @@ export async function getCanisterIds(): Promise<CanisterIds | null> {
         const response = await fetch('/canister_ids.json');
         if (response.ok) {
           const canisterIds = await response.json();
+          // Validate that all required IDs are present
+          if (!canisterIds.vi_token?.local || !canisterIds.vidrune_access_control?.local) {
+            console.error("Missing canister IDs in canister_ids.json:", { 
+              viToken: canisterIds.vi_token?.local, 
+              accessControl: canisterIds.vidrune_access_control?.local 
+            });
+            return null;
+          }
+          
+          if (!assetsFromDomain) {
+            console.error("Could not determine assets canister ID from domain. Current hostname:", window.location.hostname);
+            return null;
+          }
+
           return {
-            viToken: canisterIds.vi_token?.local,
-            accessControl: canisterIds.vidrune_access_control?.local,
-            assets: assetsFromDomain || canisterIds.vidrune_assets?.local,
+            viToken: canisterIds.vi_token.local,
+            accessControl: canisterIds.vidrune_access_control.local,
+            assets: assetsFromDomain,
           };
+        } else {
+          console.error("Failed to fetch canister_ids.json, status:", response.status);
+          return null;
         }
       } catch (error) {
-        // If fetching fails, fall back to hardcoded local IDs
-        console.warn("Could not fetch canister IDs, using defaults:", error);
+        console.error("Could not fetch canister IDs from canister_ids.json:", error);
+        return null;
       }
-
-      // Fallback to typical local development IDs
-      return {
-        viToken: "rrkah-fqaaa-aaaaa-aaaaq-cai",
-        accessControl: "rdmx6-jaaaa-aaaaa-aaadq-cai", 
-        assets: assetsFromDomain || "rno2w-sqaaa-aaaaa-aaacq-cai",
-      };
     }
 
     // For IC mainnet, we need environment variables for other canisters

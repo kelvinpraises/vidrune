@@ -11,6 +11,7 @@ import { toast } from "sonner";
 
 import { Card } from "@/library/components/atoms/card";
 import { Progress } from "@/library/components/atoms/progress";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/library/components/atoms/accordion";
 import { FileUpload } from "@/library/components/molecules/file-upload";
 import StandbyButton from "@/library/components/molecules/standby-button";
 
@@ -58,6 +59,10 @@ const ConsolePage = () => {
     viseStatus,
     viseEvent,
   } = useVideoPipeline();
+
+  // Model loading progress display states
+  const [showFlorence2Progress, setShowFlorence2Progress] = useState(false);
+  const [showKokoroProgress, setShowKokoroProgress] = useState(false);
 
   const { metadata, isLoading, error } = useMetadata();
   const { completedIndexes, scenesProcessed } = useStore();
@@ -369,53 +374,121 @@ const ConsolePage = () => {
                     </Card>
                   </div>
 
-                  {/* WebGPU Status Card */}
+                  {/* Model Status Cards with Progress */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-                    <Card className="flex flex-row justify-between p-4 bg-card text-card-foreground">
+                    <Card className="p-4 bg-card text-card-foreground">
                       <div className="flex flex-col gap-3">
-                        <div className="flex items-center gap-2">
-                          <p className="font-outfit font-semibold text-sm text-[#484E62] dark:text-[#B7BDD5]">
-                            Florence2 Model
-                          </p>
-                          <div className="group relative">
-                            <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-popover text-popover-foreground text-xs rounded-md shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
-                              AI vision model for generating scene captions
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <p className="font-outfit font-semibold text-sm text-[#484E62] dark:text-[#B7BDD5]">
+                              Florence2 Model
+                            </p>
+                            <div className="group relative">
+                              <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-popover text-popover-foreground text-xs rounded-md shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
+                                AI vision model for generating scene captions
+                              </div>
                             </div>
                           </div>
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${
+                              pipelineState.modelsLoaded.florence2 ? 'bg-green-500' : 'bg-yellow-500'
+                            }`} />
+                            <p className="text-sm font-medium">
+                              {pipelineState.modelsLoaded.florence2 ? 'Ready' : 'Loading...'}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${
-                            pipelineState.modelsLoaded.florence2 ? 'bg-green-500' : 'bg-yellow-500'
-                          }`} />
-                          <p className="text-sm font-medium">
-                            {pipelineState.modelsLoaded.florence2 ? 'Ready' : 'Loading...'}
-                          </p>
-                        </div>
+                        
+                        {!pipelineState.modelsLoaded.florence2 && (
+                          <Accordion type="single" collapsible>
+                            <AccordionItem value="progress" className="border-0">
+                              <AccordionTrigger 
+                                className="py-2 text-xs"
+                                onClick={() => setShowFlorence2Progress(!showFlorence2Progress)}
+                              >
+                                {showFlorence2Progress ? 'Hide' : 'Show'} Download Progress
+                              </AccordionTrigger>
+                              <AccordionContent className="pt-2">
+                                <div className="space-y-2">
+                                  {pipelineState.modelProgress.florence2.total && pipelineState.modelProgress.florence2.total > 0 && (
+                                    <div>
+                                      <div className="flex justify-between text-xs mb-1">
+                                        <span>{pipelineState.modelProgress.florence2.file || 'Downloading...'}</span>
+                                        <span>{Math.round(((pipelineState.modelProgress.florence2.progress || 0) / pipelineState.modelProgress.florence2.total) * 100)}%</span>
+                                      </div>
+                                      <Progress 
+                                        value={((pipelineState.modelProgress.florence2.progress || 0) / pipelineState.modelProgress.florence2.total) * 100} 
+                                        className="h-1" 
+                                      />
+                                    </div>
+                                  )}
+                                  <div className="text-xs text-muted-foreground">
+                                    Status: {pipelineState.modelProgress.florence2.status || 'Initializing...'}
+                                  </div>
+                                </div>
+                              </AccordionContent>
+                            </AccordionItem>
+                          </Accordion>
+                        )}
                       </div>
                     </Card>
 
-                    <Card className="flex flex-row justify-between p-4 bg-card text-card-foreground">
+                    <Card className="p-4 bg-card text-card-foreground">
                       <div className="flex flex-col gap-3">
-                        <div className="flex items-center gap-2">
-                          <p className="font-outfit font-semibold text-sm text-[#484E62] dark:text-[#B7BDD5]">
-                            Kokoro TTS Model
-                          </p>
-                          <div className="group relative">
-                            <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-popover text-popover-foreground text-xs rounded-md shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
-                              Text-to-speech synthesis for audio generation
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <p className="font-outfit font-semibold text-sm text-[#484E62] dark:text-[#B7BDD5]">
+                              Kokoro TTS Model
+                            </p>
+                            <div className="group relative">
+                              <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-popover text-popover-foreground text-xs rounded-md shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
+                                Text-to-speech synthesis for audio generation
+                              </div>
                             </div>
                           </div>
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${
+                              pipelineState.modelsLoaded.kokoro ? 'bg-green-500' : 'bg-yellow-500'
+                            }`} />
+                            <p className="text-sm font-medium">
+                              {pipelineState.modelsLoaded.kokoro ? 'Ready' : 'Loading...'}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${
-                            pipelineState.modelsLoaded.kokoro ? 'bg-green-500' : 'bg-yellow-500'
-                          }`} />
-                          <p className="text-sm font-medium">
-                            {pipelineState.modelsLoaded.kokoro ? 'Ready' : 'Loading...'}
-                          </p>
-                        </div>
+                        
+                        {!pipelineState.modelsLoaded.kokoro && (
+                          <Accordion type="single" collapsible>
+                            <AccordionItem value="progress" className="border-0">
+                              <AccordionTrigger 
+                                className="py-2 text-xs"
+                                onClick={() => setShowKokoroProgress(!showKokoroProgress)}
+                              >
+                                {showKokoroProgress ? 'Hide' : 'Show'} Download Progress
+                              </AccordionTrigger>
+                              <AccordionContent className="pt-2">
+                                <div className="space-y-2">
+                                  {pipelineState.modelProgress.kokoro.total && pipelineState.modelProgress.kokoro.total > 0 && (
+                                    <div>
+                                      <div className="flex justify-between text-xs mb-1">
+                                        <span>Downloading model...</span>
+                                        <span>{Math.round(((pipelineState.modelProgress.kokoro.progress || 0) / pipelineState.modelProgress.kokoro.total) * 100)}%</span>
+                                      </div>
+                                      <Progress 
+                                        value={((pipelineState.modelProgress.kokoro.progress || 0) / pipelineState.modelProgress.kokoro.total) * 100} 
+                                        className="h-1" 
+                                      />
+                                    </div>
+                                  )}
+                                  <div className="text-xs text-muted-foreground">
+                                    Status: {pipelineState.modelProgress.kokoro.status || 'Initializing...'}
+                                  </div>
+                                </div>
+                              </AccordionContent>
+                            </AccordionItem>
+                          </Accordion>
+                        )}
                       </div>
                     </Card>
                   </div>

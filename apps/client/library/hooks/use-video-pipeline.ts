@@ -16,6 +16,13 @@ interface ProcessedScene {
   processed: boolean;
 }
 
+interface ModelProgress {
+  status: string;
+  progress?: number;
+  total?: number;
+  file?: string;
+}
+
 interface PipelineState {
   viseBin: ProcessedScene[];
   florence2Bin: ProcessedScene[];
@@ -26,6 +33,10 @@ interface PipelineState {
   modelsLoaded: {
     florence2: boolean;
     kokoro: boolean;
+  };
+  modelProgress: {
+    florence2: ModelProgress;
+    kokoro: ModelProgress;
   };
   error?: string;
 }
@@ -41,6 +52,10 @@ export const useVideoPipeline = () => {
     modelsLoaded: {
       florence2: false,
       kokoro: false
+    },
+    modelProgress: {
+      florence2: { status: 'initializing' },
+      kokoro: { status: 'initializing' }
     }
   });
 
@@ -53,38 +68,179 @@ export const useVideoPipeline = () => {
 
   // Initialize WebGPU services
   useEffect(() => {
-    // Initialize Florence2 service
+    // Initialize Florence2 service and track auto-initialization
     if (!florence2Service.current) {
-      florence2Service.current = new Florence2Service();
+      const service = new Florence2Service();
+      florence2Service.current = service;
       
-      // Wait for Florence2 model to load
-      florence2Service.current.waitForModelLoad().then(() => {
-        setPipelineState(prev => ({
-          ...prev,
-          modelsLoaded: { ...prev.modelsLoaded, florence2: true }
-        }));
-      }).catch((error) => {
-        setPipelineState(prev => ({
-          ...prev,
-          error: `Florence2 model failed to load: ${error.message}`
-        }));
-      });
+      // Hook into the auto-init process by monitoring worker messages
+      const originalWorker = service.getWorker();
+      if (originalWorker) {
+        const handleProgress = (e: MessageEvent) => {
+          const { status, data } = e.data;
+          
+          switch (status) {
+            case 'loading':
+              setPipelineState(prev => ({
+                ...prev,
+                modelProgress: {
+                  ...prev.modelProgress,
+                  florence2: { status: data || 'Loading model...' }
+                }
+              }));
+              break;
+            
+            case 'initiate':
+            case 'progress':
+            case 'done':
+              if (e.data.progress !== undefined || e.data.total !== undefined) {
+                setPipelineState(prev => ({
+                  ...prev,
+                  modelProgress: {
+                    ...prev.modelProgress,
+                    florence2: {
+                      status: status === 'initiate' ? 'Starting download...' : 
+                             status === 'progress' ? 'Downloading...' : 'Processing...',
+                      progress: e.data.progress,
+                      total: e.data.total,
+                      file: e.data.file
+                    }
+                  }
+                }));
+              }
+              break;
+            
+            case 'ready':
+              setPipelineState(prev => ({
+                ...prev,
+                modelsLoaded: { ...prev.modelsLoaded, florence2: true },
+                modelProgress: {
+                  ...prev.modelProgress,
+                  florence2: { status: 'ready' }
+                }
+              }));
+              break;
+            
+            case 'error':
+              setPipelineState(prev => ({
+                ...prev,
+                error: `Florence2 model failed to load: ${data}`,
+                modelProgress: {
+                  ...prev.modelProgress,
+                  florence2: { status: 'error' }
+                }
+              }));
+              break;
+          }
+        };
+        
+        originalWorker.addEventListener('message', handleProgress);
+      }
     }
 
     // Initialize Kokoro service
     if (!kokoroService.current) {
-      kokoroService.current = new KokoroService();
+      const kokoroServiceInstance = new KokoroService();
+      kokoroService.current = kokoroServiceInstance;
       
-      // Wait for Kokoro model to load
-      kokoroService.current.waitForModelLoad().then(() => {
+      // Track Kokoro loading progress
+      setPipelineState(prev => ({
+        ...prev,
+        modelProgress: {
+          ...prev.modelProgress,
+          kokoro: { status: 'loading model...' }
+        }
+      }));
+      
+      // Hook into Kokoro worker messages for progress tracking
+      const kokoroWorker = kokoroServiceInstance.getWorker();
+      if (kokoroWorker) {
+        const handleKokoroProgress = (e: MessageEvent) => {
+          const { status } = e.data;
+          
+          switch (status) {
+            case 'device':
+              setPipelineState(prev => ({
+                ...prev,
+                modelProgress: {
+                  ...prev.modelProgress,
+                  kokoro: { status: `Using ${e.data.device} device` }
+                }
+              }));
+              break;
+              
+            case 'loading':
+              setPipelineState(prev => ({
+                ...prev,
+                modelProgress: {
+                  ...prev.modelProgress,
+                  kokoro: { status: 'Loading TTS model...' }
+                }
+              }));
+              break;
+              
+            case 'progress':
+              if (e.data.progress !== undefined && e.data.total !== undefined) {
+                setPipelineState(prev => ({
+                  ...prev,
+                  modelProgress: {
+                    ...prev.modelProgress,
+                    kokoro: {
+                      status: 'Downloading TTS model...',
+                      progress: e.data.progress,
+                      total: e.data.total,
+                      file: e.data.file
+                    }
+                  }
+                }));
+              }
+              break;
+              
+            case 'ready':
+              setPipelineState(prev => ({
+                ...prev,
+                modelsLoaded: { ...prev.modelsLoaded, kokoro: true },
+                modelProgress: {
+                  ...prev.modelProgress,
+                  kokoro: { status: 'ready' }
+                }
+              }));
+              break;
+              
+            case 'error':
+              setPipelineState(prev => ({
+                ...prev,
+                error: `Kokoro model failed to load: ${e.data.error}`,
+                modelProgress: {
+                  ...prev.modelProgress,
+                  kokoro: { status: 'error' }
+                }
+              }));
+              break;
+          }
+        };
+        
+        kokoroWorker.addEventListener('message', handleKokoroProgress);
+      }
+      
+      // Wait for Kokoro model to load as fallback
+      kokoroServiceInstance.waitForModelLoad().then(() => {
         setPipelineState(prev => ({
           ...prev,
-          modelsLoaded: { ...prev.modelsLoaded, kokoro: true }
+          modelsLoaded: { ...prev.modelsLoaded, kokoro: true },
+          modelProgress: {
+            ...prev.modelProgress,
+            kokoro: { status: 'ready' }
+          }
         }));
       }).catch((error) => {
         setPipelineState(prev => ({
           ...prev,
-          error: `Kokoro model failed to load: ${error.message}`
+          error: `Kokoro model failed to load: ${error.message}`,
+          modelProgress: {
+            ...prev.modelProgress,
+            kokoro: { status: 'error' }
+          }
         }));
       });
     }
@@ -105,7 +261,6 @@ export const useVideoPipeline = () => {
     stopPolling,
     startUploadPolling,
     stopUploadPolling,
-    capturedImages,
     capturedScenes,
     processStatus,
     lastEvent

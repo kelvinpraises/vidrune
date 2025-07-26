@@ -21,11 +21,24 @@ async function initializeModel() {
     device = (await detectWebGPU()) ? "webgpu" : "wasm";
     self.postMessage({ status: "device", device });
 
-    // Load the model
+    // Load the model with progress updates
+    self.postMessage({ status: "loading", message: "Loading Kokoro TTS model..." });
+    
     const model_id = "onnx-community/Kokoro-82M-v1.0-ONNX";
     tts = await KokoroTTS.from_pretrained(model_id, {
       dtype: device === "wasm" ? "q8" : "fp32",
       device,
+      progress_callback: (progress: any) => {
+        // Forward progress from the underlying loader
+        if (progress.status === 'progress' && progress.progress !== undefined && progress.total !== undefined) {
+          self.postMessage({
+            status: "progress",
+            progress: progress.progress,
+            total: progress.total,
+            file: progress.file || "model files"
+          });
+        }
+      }
     });
 
     self.postMessage({ 

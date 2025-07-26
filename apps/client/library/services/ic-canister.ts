@@ -1,80 +1,24 @@
-import { HttpAgent, Actor } from "@dfinity/agent";
+import { HttpAgent } from "@dfinity/agent";
 import { Principal } from "@dfinity/principal";
-import { IDL } from "@dfinity/candid";
 import useStore from "../store";
 import { getCanisterIds, validateCanisterIds, type CanisterIds } from "./ic-canister-ids";
 
-// IDL for VI Token (ICRC-1/ICRC-2)
-const viTokenIDL = () => {
-  return IDL.Service({
-    'icrc1_balance_of': IDL.Func(
-      [IDL.Record({ 'owner': IDL.Principal, 'subaccount': IDL.Opt(IDL.Vec(IDL.Nat8)) })],
-      [IDL.Nat],
-      ['query']
-    ),
-    'icrc1_name': IDL.Func([], [IDL.Text], ['query']),
-    'icrc1_symbol': IDL.Func([], [IDL.Text], ['query']),
-    'icrc2_approve': IDL.Func(
-      [IDL.Record({
-        'amount': IDL.Nat,
-        'spender': IDL.Record({ 'owner': IDL.Principal, 'subaccount': IDL.Opt(IDL.Vec(IDL.Nat8)) }),
-        'fee': IDL.Opt(IDL.Nat),
-        'memo': IDL.Opt(IDL.Vec(IDL.Nat8)),
-        'from_subaccount': IDL.Opt(IDL.Vec(IDL.Nat8)),
-        'created_at_time': IDL.Opt(IDL.Nat64),
-        'expected_allowance': IDL.Opt(IDL.Nat),
-        'expires_at': IDL.Opt(IDL.Nat64)
-      })],
-      [IDL.Variant({ 'Ok': IDL.Nat, 'Err': IDL.Text })],
-      []
-    ),
-  });
-};
-
-// IDL for Access Control canister
-const accessControlIDL = () => {
-  const TokenBalance = IDL.Record({
-    'viTokens': IDL.Nat,
-    'lastUpdated': IDL.Nat64,
-  });
-
-  const Result = IDL.Variant({
-    'Ok': IDL.Text,
-    'Err': IDL.Text,
-  });
-
-  return IDL.Service({
-    'getTestnetTokens': IDL.Func([], [Result], []),
-    'getTokenBalance': IDL.Func([IDL.Principal], [TokenBalance], ['query']),
-    'canUpload': IDL.Func([IDL.Principal], [IDL.Bool], ['query']),
-    'storeVideoMetadata': IDL.Func(
-      [IDL.Text, IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
-      [Result],
-      []
-    ),
-    'getStats': IDL.Func([], [IDL.Record({
-      'totalUploads': IDL.Nat,
-      'totalUsers': IDL.Nat,
-      'totalTokensDistributed': IDL.Nat,
-    })], ['query']),
-  });
-};
-
-export interface TokenBalance {
-  viTokens: bigint;
-  lastUpdated: bigint;
-}
+// Import generated declarations
+import { createActor as createViTokenActor } from "@/library/types/ic-declarations/vi_token";
+import { createActor as createAccessControlActor } from "@/library/types/ic-declarations/vidrune_access_control";
+import type { _SERVICE as ViTokenService } from "@/library/types/ic-declarations/vi_token/vi_token.did";
+import type { _SERVICE as AccessControlService } from "@/library/types/ic-declarations/vidrune_access_control/vidrune_access_control.did";
 
 export interface UploadStats {
-  totalUploads: bigint;
+  totalVideos: bigint;
   totalUsers: bigint; 
   totalTokensDistributed: bigint;
 }
 
 class ICCanisterService {
   private agent: HttpAgent | null = null;
-  private viTokenActor: any = null;
-  private accessControlActor: any = null;
+  private viTokenActor: ViTokenService | null = null;
+  private accessControlActor: AccessControlService | null = null;
   private canisterIds: CanisterIds | null = null;
 
   constructor() {
@@ -102,15 +46,13 @@ class ICCanisterService {
       this.canisterIds = await getCanisterIds();
 
       if (this.canisterIds && validateCanisterIds(this.canisterIds)) {
-        // Initialize actors
-        this.viTokenActor = Actor.createActor(viTokenIDL, {
+        // Initialize actors using generated declarations
+        this.viTokenActor = createViTokenActor(this.canisterIds.viToken, {
           agent: this.agent,
-          canisterId: this.canisterIds.viToken,
         });
 
-        this.accessControlActor = Actor.createActor(accessControlIDL, {
+        this.accessControlActor = createAccessControlActor(this.canisterIds.accessControl, {
           agent: this.agent,
-          canisterId: this.canisterIds.accessControl,
         });
       } else {
         console.error("Invalid canister IDs - service not initialized");
@@ -133,7 +75,7 @@ class ICCanisterService {
         throw new Error("VI Token actor not initialized");
       }
 
-      const principal = this.agent!.getPrincipal();
+      const principal = await this.agent!.getPrincipal();
       const balance = await this.viTokenActor.icrc1_balance_of({
         owner: principal,
         subaccount: [],
@@ -159,14 +101,14 @@ class ICCanisterService {
 
       const result = await this.accessControlActor.getTestnetTokens();
       
-      if ('Ok' in result) {
-        return { success: true, message: result.Ok };
+      if ('ok' in result) {
+        return { success: true, message: result.ok };
       } else {
-        return { success: false, message: result.Err };
+        return { success: false, message: result.err };
       }
     } catch (error) {
       console.error("Failed to get testnet tokens:", error);
-      return { success: false, message: "Network error occurred" };
+      return { success: false, message: `Failed to get testnet tokens: ${error instanceof Error ? error.message : 'Unknown error'}` };
     }
   }
 
@@ -180,8 +122,13 @@ class ICCanisterService {
         return false;
       }
 
-      const principal = this.agent!.getPrincipal();
-      return await this.accessControlActor.canUpload(principal);
+      const result = await this.accessControlActor.canUpload();
+      if ('ok' in result) {
+        return result.ok;
+      } else {
+        console.error("canUpload error:", result.err);
+        return false;
+      }
     } catch (error) {
       console.error("Failed to check upload permission:", error);
       return false;
@@ -217,7 +164,7 @@ class ICCanisterService {
       if ('Ok' in result) {
         return { success: true, message: `Approved ${amount} VI tokens for upload` };
       } else {
-        return { success: false, message: result.Err };
+        return { success: false, message: String(result.Err) };
       }
     } catch (error) {
       console.error("Failed to approve tokens:", error);
@@ -249,10 +196,10 @@ class ICCanisterService {
         metadataKey ? [metadataKey] : []
       );
 
-      if ('Ok' in result) {
-        return { success: true, message: result.Ok };
+      if ('ok' in result) {
+        return { success: true, message: result.ok };
       } else {
-        return { success: false, message: result.Err };
+        return { success: false, message: result.err };
       }
     } catch (error) {
       console.error("Failed to store video metadata:", error);
@@ -270,7 +217,12 @@ class ICCanisterService {
         return null;
       }
 
-      return await this.accessControlActor.getStats();
+      const stats = await this.accessControlActor.getStats();
+      return {
+        totalVideos: stats.totalVideos,
+        totalUsers: BigInt(0), // Not available in current canister interface
+        totalTokensDistributed: stats.testnetGiftAmount,
+      };
     } catch (error) {
       console.error("Failed to get upload stats:", error);
       return null;
