@@ -200,4 +200,16 @@ echo -e "   testICIntegration()"
 echo -e ""
 echo -e "${GREEN}✨ System deployed successfully!${NC}"
 echo -e "${CYAN}💡 Frontend build is ready in apps/client/dist${NC}"
-echo -e "${CYAN}💡 Run 'dfx stop' to stop the IC replica${NC}"
+echo -e "${CYAN}💡 Press Ctrl+C to stop monitoring and IC replica${NC}"
+echo ""
+
+# Keep monitoring the system
+echo -e "${BLUE}🔄 Monitoring system health...${NC}"
+while true; do
+    if dfx ping >/dev/null 2>&1; then
+        echo -e "${GREEN}$(date '+%H:%M:%S') ✅ IC replica healthy${NC}"
+    else
+        echo -e "${RED}$(date '+%H:%M:%S') ❌ IC replica unhealthy${NC}"
+    fi
+    sleep 10
+done
