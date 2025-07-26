@@ -1,6 +1,7 @@
 import { Ed25519KeyIdentity } from "@dfinity/identity";
 import { HttpAgent } from "@dfinity/agent";
 import type { AssetManager } from "@dfinity/assets";
+import useStore from "../store";
 
 // Dynamic import function for AssetManager to avoid Node.js dependencies in bundle
 async function loadAssetManager() {
@@ -38,16 +39,28 @@ class ICStorageService {
   private AssetManagerClass: AssetManagerConstructor | null = null;
 
   constructor() {
-    this.initializeAgent();
+    // Only initialize on client-side to avoid SSR issues
+    if (typeof window !== 'undefined') {
+      this.initializeAgent();
+    }
+  }
+
+  private getOrCreateBrowserIdentity(): Ed25519KeyIdentity {
+    try {
+      // Use store to get or create identity
+      const { identity } = useStore.getState().getOrCreateIdentity();
+      return identity;
+    } catch (error) {
+      console.warn("Failed to manage browser identity via store, using temporary identity:", error);
+      // Fallback to temporary identity if store fails
+      return Ed25519KeyIdentity.generate();
+    }
   }
 
   private initializeAgent() {
     try {
-      // TODO: Replace with actual Internet Identity when integrated
-      // For now using a hardcoded identity for development
-      const seedArray = new Uint8Array(32);
-      seedArray.fill(0); // Fill with zeros for consistent identity
-      const identity = Ed25519KeyIdentity.generate(seedArray);
+      // Generate or retrieve a unique identity for this browser
+      const identity = this.getOrCreateBrowserIdentity();
 
       const isLocal = !window.location.host.endsWith("ic0.app");
       const host = isLocal ? `http://127.0.0.1:${window.location.port}` : "https://ic0.app";
@@ -237,6 +250,19 @@ class ICStorageService {
       canisterId: this.canisterId,
       isLocal: !window.location.host.endsWith("ic0.app"),
     };
+  }
+
+  getCurrentPrincipal(): string | null {
+    if (!this.agent) {
+      return null;
+    }
+    return this.agent.getPrincipal().toString();
+  }
+
+  // Helper method to clear identity (for testing/debugging)
+  clearIdentity(): void {
+    localStorage.removeItem("vidrune_ic_identity");
+    this.initializeAgent(); // Reinitialize with new identity
   }
 }
 
