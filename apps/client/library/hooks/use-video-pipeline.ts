@@ -56,6 +56,19 @@ export const useVideoPipeline = () => {
     // Initialize Florence2 service
     if (!florence2Service.current) {
       florence2Service.current = new Florence2Service();
+      
+      // Wait for Florence2 model to load
+      florence2Service.current.waitForModelLoad().then(() => {
+        setPipelineState(prev => ({
+          ...prev,
+          modelsLoaded: { ...prev.modelsLoaded, florence2: true }
+        }));
+      }).catch((error) => {
+        setPipelineState(prev => ({
+          ...prev,
+          error: `Florence2 model failed to load: ${error.message}`
+        }));
+      });
     }
 
     // Initialize Kokoro service
@@ -251,36 +264,10 @@ export const useVideoPipeline = () => {
     setIsProcessing(true);
     setPipelineState(prev => ({ ...prev, currentStage: 'vise', error: undefined }));
     
-    // Load Florence2 model if not already loaded
-    if (florence2Service.current && !pipelineState.modelsLoaded.florence2) {
-      try {
-        await florence2Service.current.loadModel(
-          (progress) => {
-            // Handle loading progress
-            console.log('Florence2 loading progress:', progress);
-          },
-          (message) => {
-            console.log('Florence2 loading message:', message);
-          }
-        );
-        
-        setPipelineState(prev => ({
-          ...prev,
-          modelsLoaded: { ...prev.modelsLoaded, florence2: true }
-        }));
-      } catch (error) {
-        setPipelineState(prev => ({
-          ...prev,
-          error: `Florence2 model failed to load: ${error instanceof Error ? error.message : 'Unknown error'}`
-        }));
-        setIsProcessing(false);
-        return;
-      }
-    }
-    
+    // Models are auto-loaded on initialization, so we can start immediately
     startPolling();
     startUploadPolling();
-  }, [startPolling, startUploadPolling, pipelineState.modelsLoaded.florence2]);
+  }, [startPolling, startUploadPolling]);
 
   const stopPipeline = useCallback(() => {
     setIsProcessing(false);
