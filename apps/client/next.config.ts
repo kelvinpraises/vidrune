@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: 'export',
+  trailingSlash: true,
+  images: {
+    unoptimized: true,
+  },
   webpack: (config, { isServer }) => {
     // Handle Node.js modules that don't work in the browser
     if (!isServer) {
