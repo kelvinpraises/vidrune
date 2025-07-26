@@ -17,6 +17,7 @@ import StandbyButton from "@/library/components/molecules/standby-button";
 import { UserIndexedVideos } from "@/library/components/organisms/user-indexed-videos";
 import { useMetadata } from "@/library/hooks/use-metadata";
 import { useVideoPipeline } from "@/library/hooks/use-video-pipeline";
+import useStore from "@/library/store";
 
 const Globe = dynamic(() => import("@/library/components/organisms/wrapped-globe"), {
   ssr: false,
@@ -59,6 +60,7 @@ const ConsolePage = () => {
   } = useVideoPipeline();
 
   const { metadata, isLoading, error } = useMetadata();
+  const { completedIndexes, scenesProcessed } = useStore();
   const { theme, systemTheme } = useTheme();
   const currentTheme = theme === "system" ? systemTheme : theme;
 
@@ -342,23 +344,28 @@ const ConsolePage = () => {
                       </div>
                     </Card>
 
-                    <Card
-                      onClick={handleClaimRewards}
-                      className="flex flex-wrap justify-between p-4 cursor-pointer bg-card text-card-foreground gap-2 hover:bg-accent transition-colors"
-                    >
+                    <Card className="flex flex-wrap justify-between p-4 bg-card text-card-foreground gap-2">
                       <div className="flex flex-col gap-3 md:gap-6">
                         <div className="flex items-center gap-2">
                           <p className="font-outfit font-semibold text-sm md:text-base text-[#484E62] dark:text-[#B7BDD5]">
-                            Completed
+                            Points Earned
+                          </p>
+                          <div className="group relative">
+                            <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-popover text-popover-foreground text-xs rounded-md shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
+                              Points earned from successful video uploads (2 VI tokens each)
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex flex-col">
+                          <p className="text-3xl md:text-4xl font-outfit font-bold text-[#34C759]">
+                            {completedIndexes}
+                          </p>
+                          <p className="text-xs text-muted-foreground text-end">
+                            {scenesProcessed} scenes processed
                           </p>
                         </div>
-                        <p className="text-3xl md:text-4xl font-outfit font-bold">
-                          {pipelineState.completed.length}
-                        </p>
                       </div>
-                      <p className="font-atyp text-sm text-[#34C759] font-bold self-end">
-                        {isClaiming ? "Processing..." : "Claim Rewards  ↗"}
-                      </p>
                     </Card>
                   </div>
                 </div>
@@ -549,7 +556,7 @@ const ConsolePage = () => {
           </motion.div>
         )}
       </AnimatePresence>
-      <p className="font-outfit p-4 text-sm">
+      <p className="font-outfit p-4 text-sm text-center">
         Vidrune powered by VISE x Florence2 x KokoroTTS x Transformer.js
       </p>
     </div>

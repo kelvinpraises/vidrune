@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect } from "react";
+import { toast } from "sonner";
 
 import {
   DropdownMenu,
@@ -13,40 +14,101 @@ import {
 } from "@/library/components/atoms/dropdown-menu";
 import { useMounted } from "@/library/hooks/use-mounted";
 import { cn, ellipsisAddress } from "@/library/utils";
+import { TokenFaucet } from "./token-faucet";
+import { icCanisterService } from "@/library/services/ic-canister";
+import useStore from "@/library/store";
 
-// TODO: Replace with Internet Computer authentication
-interface MockICAuth {
+interface ICAuth {
   isConnected: boolean;
   principal: string | null;
+  tokenBalance: number;
+  isLoadingBalance: boolean;
 }
 
 export function ConnectButton() {
   const isMounted = useMounted();
+  const { getOrCreateIdentity, isInitialized } = useStore();
   
-  // TODO: Replace with actual Internet Identity integration
-  const [icAuth, setICAuth] = useState<MockICAuth>({
+  const [icAuth, setICAuth] = useState<ICAuth>({
     isConnected: false,
     principal: null,
+    tokenBalance: 0,
+    isLoadingBalance: false,
   });
 
   const handleConnect = useCallback(async () => {
-    // TODO: Implement Internet Identity login
-    console.log("TODO: Implement Internet Identity login");
-    // Placeholder mock connection
-    setICAuth({
-      isConnected: true,
-      principal: "rdmx6-jaaaa-aaaah-qcaiq-cai", // Mock principal
-    });
-  }, []);
+    try {
+      const { identity, principal } = getOrCreateIdentity();
+      setICAuth(prev => ({
+        ...prev,
+        isConnected: true,
+        principal,
+        isLoadingBalance: true,
+      }));
+      
+      // Fetch initial token balance
+      const balance = await icCanisterService.getTokenBalance();
+      setICAuth(prev => ({
+        ...prev,
+        tokenBalance: balance,
+        isLoadingBalance: false,
+      }));
+      
+      // Show warning if balance is low
+      if (balance < 6) {
+        toast.warning("Low token balance!", {
+          description: `You have ${Math.round(balance)} VI tokens. Get more from the faucet to continue indexing.`,
+          duration: 5000,
+        });
+      }
+    } catch (error) {
+      console.error("Failed to connect:", error);
+      toast.error("Connection failed", {
+        description: "Please try again",
+      });
+    }
+  }, [getOrCreateIdentity]);
 
   const handleDisconnect = useCallback(() => {
-    // TODO: Implement Internet Identity logout
-    console.log("TODO: Implement Internet Identity logout");
     setICAuth({
       isConnected: false,
       principal: null,
+      tokenBalance: 0,
+      isLoadingBalance: false,
     });
   }, []);
+
+  const refreshBalance = useCallback(async () => {
+    if (!icAuth.isConnected) return;
+    
+    setICAuth(prev => ({ ...prev, isLoadingBalance: true }));
+    try {
+      const balance = await icCanisterService.getTokenBalance();
+      setICAuth(prev => ({
+        ...prev,
+        tokenBalance: balance,
+        isLoadingBalance: false,
+      }));
+    } catch (error) {
+      console.error("Failed to refresh balance:", error);
+      setICAuth(prev => ({ ...prev, isLoadingBalance: false }));
+    }
+  }, [icAuth.isConnected]);
+
+  // Auto-connect if identity exists in store
+  useEffect(() => {
+    if (isInitialized && !icAuth.isConnected) {
+      handleConnect();
+    }
+  }, [isInitialized, icAuth.isConnected, handleConnect]);
+
+  // Periodic balance refresh
+  useEffect(() => {
+    if (!icAuth.isConnected) return;
+    
+    const interval = setInterval(refreshBalance, 30000); // Refresh every 30 seconds
+    return () => clearInterval(interval);
+  }, [icAuth.isConnected, refreshBalance]);
 
   if (!icAuth.isConnected) {
     return (
@@ -66,8 +128,13 @@ export function ConnectButton() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className="bg-[#33CB82] hover:bg-[#33CB82]/80 w-[18ch] flex items-center justify-center font-medium px-6 rounded-[0] py-4 transition-colors duration-200">
-          {ellipsisAddress(icAuth.principal || "")}
+        <button className="bg-[#33CB82] hover:bg-[#33CB82]/80 w-[18ch] flex flex-col items-center justify-center font-medium px-6 rounded-[0] py-4 transition-colors duration-200">
+          <div className="text-xs opacity-80">
+            {icAuth.isLoadingBalance ? "Loading..." : `${Math.round(icAuth.tokenBalance)} VI`}
+          </div>
+          <div className="text-sm">
+            {ellipsisAddress(icAuth.principal || "")}
+          </div>
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-56" align="end" forceMount>
@@ -75,14 +142,22 @@ export function ConnectButton() {
           <div className="flex flex-col space-y-1">
             <p className="text-sm font-medium leading-none">Connected</p>
             <p className="text-xs leading-none text-muted-foreground">
-              Internet Computer
+              {Math.round(icAuth.tokenBalance)} VI tokens
             </p>
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem onClick={() => console.log("TODO: Profile")}>
-            Profile
+          <TokenFaucet
+            currentBalance={icAuth.tokenBalance}
+            onBalanceUpdate={refreshBalance}
+          >
+            <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+              Get Tokens
+            </DropdownMenuItem>
+          </TokenFaucet>
+          <DropdownMenuItem onClick={refreshBalance} disabled={icAuth.isLoadingBalance}>
+            {icAuth.isLoadingBalance ? "Refreshing..." : "Refresh Balance"}
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
