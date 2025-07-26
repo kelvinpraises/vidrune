@@ -1,5 +1,7 @@
 import { useCallback, useState, useRef, useEffect } from 'react';
 import useCaptureStills from './use-capture-stills';
+import { Florence2Service } from '../services/florence2-service';
+import { KokoroService } from '../services/kokoro-service';
 
 interface Scene {
   description: string;
@@ -21,6 +23,11 @@ interface PipelineState {
   completed: ProcessedScene[];
   currentStage: 'idle' | 'vise' | 'florence2' | 'kokoro' | 'complete';
   progress: number;
+  modelsLoaded: {
+    florence2: boolean;
+    kokoro: boolean;
+  };
+  error?: string;
 }
 
 export const useVideoPipeline = () => {
@@ -30,11 +37,50 @@ export const useVideoPipeline = () => {
     kokoroBin: [],
     completed: [],
     currentStage: 'idle',
-    progress: 0
+    progress: 0,
+    modelsLoaded: {
+      florence2: false,
+      kokoro: false
+    }
   });
 
   const [isProcessing, setIsProcessing] = useState(false);
   const processingRef = useRef(false);
+  
+  // WebGPU Services
+  const florence2Service = useRef<Florence2Service | null>(null);
+  const kokoroService = useRef<KokoroService | null>(null);
+
+  // Initialize WebGPU services
+  useEffect(() => {
+    // Initialize Florence2 service
+    if (!florence2Service.current) {
+      florence2Service.current = new Florence2Service();
+    }
+
+    // Initialize Kokoro service
+    if (!kokoroService.current) {
+      kokoroService.current = new KokoroService();
+      
+      // Wait for Kokoro model to load
+      kokoroService.current.waitForModelLoad().then(() => {
+        setPipelineState(prev => ({
+          ...prev,
+          modelsLoaded: { ...prev.modelsLoaded, kokoro: true }
+        }));
+      }).catch((error) => {
+        setPipelineState(prev => ({
+          ...prev,
+          error: `Kokoro model failed to load: ${error.message}`
+        }));
+      });
+    }
+
+    return () => {
+      florence2Service.current?.dispose();
+      kokoroService.current?.dispose();
+    };
+  }, []);
 
   // VISE Engine (existing capture hooks)
   const {
@@ -57,58 +103,118 @@ export const useVideoPipeline = () => {
     if (processingRef.current) return;
     processingRef.current = true;
 
-    setPipelineState(prev => {
-      const newState = { ...prev };
+    try {
+      const currentState = pipelineState;
 
       // Process VISE bin -> Florence2
-      if (newState.viseBin.length > 0) {
-        newState.currentStage = 'florence2';
-        const scene = newState.viseBin.shift()!;
+      if (currentState.viseBin.length > 0) {
+        setPipelineState(prev => ({ ...prev, currentStage: 'florence2' }));
+        const scene = currentState.viseBin[0];
         
-        // Florence2 processor body (placeholder)
-        const captionedScene = {
-          ...scene,
-          caption: `Scene at ${scene.timestamp.toFixed(1)}s: A video frame showing visual content`,
-          processed: true
-        };
-        
-        newState.florence2Bin.push(captionedScene);
+        if (florence2Service.current && currentState.modelsLoaded.florence2) {
+          try {
+            const { result } = await florence2Service.current.generateCaption(
+              scene.imageUrl,
+              '<DETAILED_CAPTION>'
+            );
+            
+            const captionedScene = {
+              ...scene,
+              caption: result['<DETAILED_CAPTION>'] as string || `Scene at ${scene.timestamp.toFixed(1)}s`,
+              processed: true
+            };
+            
+            setPipelineState(prev => ({
+              ...prev,
+              viseBin: prev.viseBin.slice(1),
+              florence2Bin: [...prev.florence2Bin, captionedScene]
+            }));
+          } catch (error) {
+            console.error('Florence2 processing error:', error);
+            // Fallback to basic caption
+            const captionedScene = {
+              ...scene,
+              caption: `Scene at ${scene.timestamp.toFixed(1)}s: Video frame`,
+              processed: true
+            };
+            
+            setPipelineState(prev => ({
+              ...prev,
+              viseBin: prev.viseBin.slice(1),
+              florence2Bin: [...prev.florence2Bin, captionedScene]
+            }));
+          }
+        }
       }
       // Process Florence2 bin -> Kokoro
-      else if (newState.florence2Bin.length > 0) {
-        newState.currentStage = 'kokoro';
-        const scene = newState.florence2Bin.shift()!;
+      else if (currentState.florence2Bin.length > 0) {
+        setPipelineState(prev => ({ ...prev, currentStage: 'kokoro' }));
+        const scene = currentState.florence2Bin[0];
         
-        // Kokoro processor body (placeholder)
-        const audioScene = {
-          ...scene,
-          audioUrl: `data:audio/wav;base64,${generateMockAudio()}`,
-          processed: true
-        };
-        
-        newState.kokoroBin.push(audioScene);
+        if (kokoroService.current && currentState.modelsLoaded.kokoro && scene.caption) {
+          try {
+            const audioResult = await kokoroService.current.generateAudio(
+              scene.caption,
+              'af_heart' // Default voice
+            );
+            
+            const audioScene = {
+              ...scene,
+              audioUrl: audioResult.audio,
+              processed: true
+            };
+            
+            setPipelineState(prev => ({
+              ...prev,
+              florence2Bin: prev.florence2Bin.slice(1),
+              kokoroBin: [...prev.kokoroBin, audioScene]
+            }));
+          } catch (error) {
+            console.error('Kokoro processing error:', error);
+            // Move to kokoro bin without audio
+            setPipelineState(prev => ({
+              ...prev,
+              florence2Bin: prev.florence2Bin.slice(1),
+              kokoroBin: [...prev.kokoroBin, { ...scene, processed: true }]
+            }));
+          }
+        }
       }
       // Process Kokoro bin -> Completed
-      else if (newState.kokoroBin.length > 0) {
-        const scene = newState.kokoroBin.shift()!;
-        newState.completed.push(scene);
+      else if (currentState.kokoroBin.length > 0) {
+        const scene = currentState.kokoroBin[0];
         
-        if (newState.kokoroBin.length === 0 && newState.florence2Bin.length === 0 && newState.viseBin.length === 0) {
-          newState.currentStage = 'complete';
-        }
+        setPipelineState(prev => {
+          const newState = {
+            ...prev,
+            kokoroBin: prev.kokoroBin.slice(1),
+            completed: [...prev.completed, scene]
+          };
+          
+          // Check if pipeline is complete
+          if (newState.kokoroBin.length === 0 && newState.florence2Bin.length === 0 && newState.viseBin.length === 0) {
+            newState.currentStage = 'complete';
+          }
+          
+          // Update progress
+          const totalScenes = newState.viseBin.length + newState.florence2Bin.length + newState.kokoroBin.length + newState.completed.length;
+          newState.progress = totalScenes > 0 ? (newState.completed.length / totalScenes) * 100 : 0;
+          
+          return newState;
+        });
       } else {
-        newState.currentStage = 'idle';
+        setPipelineState(prev => ({ ...prev, currentStage: 'idle' }));
       }
-
-      // Update progress
-      const totalScenes = newState.viseBin.length + newState.florence2Bin.length + newState.kokoroBin.length + newState.completed.length;
-      newState.progress = totalScenes > 0 ? (newState.completed.length / totalScenes) * 100 : 0;
-
-      return newState;
-    });
+    } catch (error) {
+      console.error('Pipeline processing error:', error);
+      setPipelineState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Pipeline processing failed'
+      }));
+    }
 
     processingRef.current = false;
-  }, []);
+  }, [pipelineState]);
 
   // Monitor VISE engine output and add to pipeline
   useEffect(() => {
@@ -141,12 +247,40 @@ export const useVideoPipeline = () => {
     }
   }, [isProcessing, processNextItem]);
 
-  const startPipeline = useCallback(() => {
+  const startPipeline = useCallback(async () => {
     setIsProcessing(true);
-    setPipelineState(prev => ({ ...prev, currentStage: 'vise' }));
+    setPipelineState(prev => ({ ...prev, currentStage: 'vise', error: undefined }));
+    
+    // Load Florence2 model if not already loaded
+    if (florence2Service.current && !pipelineState.modelsLoaded.florence2) {
+      try {
+        await florence2Service.current.loadModel(
+          (progress) => {
+            // Handle loading progress
+            console.log('Florence2 loading progress:', progress);
+          },
+          (message) => {
+            console.log('Florence2 loading message:', message);
+          }
+        );
+        
+        setPipelineState(prev => ({
+          ...prev,
+          modelsLoaded: { ...prev.modelsLoaded, florence2: true }
+        }));
+      } catch (error) {
+        setPipelineState(prev => ({
+          ...prev,
+          error: `Florence2 model failed to load: ${error instanceof Error ? error.message : 'Unknown error'}`
+        }));
+        setIsProcessing(false);
+        return;
+      }
+    }
+    
     startPolling();
     startUploadPolling();
-  }, [startPolling, startUploadPolling]);
+  }, [startPolling, startUploadPolling, pipelineState.modelsLoaded.florence2]);
 
   const stopPipeline = useCallback(() => {
     setIsProcessing(false);
@@ -214,10 +348,6 @@ export const useVideoPipeline = () => {
 };
 
 // Helper functions
-function generateMockAudio(): string {
-  // Generate a simple base64 audio placeholder
-  return 'UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmMaADB...';
-}
 
 function formatSRTTime(seconds: number): string {
   const hours = Math.floor(seconds / 3600);

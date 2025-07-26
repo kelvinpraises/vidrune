@@ -20,8 +20,8 @@ cleanup() {
     echo -e "${GREEN}✅ IC replica stopped${NC}"
 }
 
-# Set trap for cleanup on exit
-trap cleanup EXIT INT TERM
+# Set trap for cleanup only on interrupt/termination (not normal exit)
+trap cleanup INT TERM
 
 echo -e "${GREEN}🚀 Complete Vidrune System Deployment Pipeline${NC}"
 echo -e "${CYAN}💡 This script will manage multiple terminals automatically${NC}"

@@ -368,6 +368,74 @@ const ConsolePage = () => {
                       </div>
                     </Card>
                   </div>
+
+                  {/* WebGPU Status Card */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                    <Card className="flex flex-row justify-between p-4 bg-card text-card-foreground">
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-center gap-2">
+                          <p className="font-outfit font-semibold text-sm text-[#484E62] dark:text-[#B7BDD5]">
+                            Florence2 Model
+                          </p>
+                          <div className="group relative">
+                            <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-popover text-popover-foreground text-xs rounded-md shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
+                              AI vision model for generating scene captions
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full ${
+                            pipelineState.modelsLoaded.florence2 ? 'bg-green-500' : 'bg-yellow-500'
+                          }`} />
+                          <p className="text-sm font-medium">
+                            {pipelineState.modelsLoaded.florence2 ? 'Ready' : 'Loading...'}
+                          </p>
+                        </div>
+                      </div>
+                    </Card>
+
+                    <Card className="flex flex-row justify-between p-4 bg-card text-card-foreground">
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-center gap-2">
+                          <p className="font-outfit font-semibold text-sm text-[#484E62] dark:text-[#B7BDD5]">
+                            Kokoro TTS Model
+                          </p>
+                          <div className="group relative">
+                            <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-popover text-popover-foreground text-xs rounded-md shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
+                              Text-to-speech synthesis for audio generation
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full ${
+                            pipelineState.modelsLoaded.kokoro ? 'bg-green-500' : 'bg-yellow-500'
+                          }`} />
+                          <p className="text-sm font-medium">
+                            {pipelineState.modelsLoaded.kokoro ? 'Ready' : 'Loading...'}
+                          </p>
+                        </div>
+                      </div>
+                    </Card>
+                  </div>
+
+                  {/* Error Display */}
+                  {pipelineState.error && (
+                    <div className="mt-4">
+                      <Card className="p-4 border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-red-500" />
+                          <p className="text-sm font-medium text-red-800 dark:text-red-200">
+                            Pipeline Error
+                          </p>
+                        </div>
+                        <p className="text-sm text-red-600 dark:text-red-300 mt-2">
+                          {pipelineState.error}
+                        </p>
+                      </Card>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex flex-col p-2 md:p-4 gap-2 md:gap-4">
