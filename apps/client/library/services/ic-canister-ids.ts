@@ -5,34 +5,62 @@ export interface CanisterIds {
   assets: string;
 }
 
+function getAssetsCanisterFromDomain(): string | null {
+  const hostname = window.location.hostname;
+  const search = window.location.search;
+  
+  // IC mainnet: extract canister ID from "canister-id.ic0.app"
+  if (hostname.endsWith('.ic0.app')) {
+    return hostname.replace('.ic0.app', '');
+  }
+  
+  // Local recommended: extract canister ID from "canister-id.localhost"
+  if (hostname.endsWith('.localhost')) {
+    return hostname.replace('.localhost', '');
+  }
+  
+  // Legacy local: extract from URL parameter "?canisterId=canister-id"
+  if (hostname === '127.0.0.1' || hostname === 'localhost') {
+    const urlParams = new URLSearchParams(search);
+    const canisterId = urlParams.get('canisterId');
+    if (canisterId) {
+      return canisterId;
+    }
+  }
+  
+  // Return null if we can't determine from domain/URL (will fall back to reading from file)
+  return null;
+}
+
 export async function getCanisterIds(): Promise<CanisterIds | null> {
   try {
-    // Try to get from environment variables first (for production)
+    // Try to get assets canister from domain/URL first (most reliable)
+    const assetsFromDomain = getAssetsCanisterFromDomain();
+    
+    // Try to get from environment variables (for production)
     const viTokenId = process.env.NEXT_PUBLIC_VI_TOKEN_CANISTER_ID;
     const accessControlId = process.env.NEXT_PUBLIC_ACCESS_CONTROL_CANISTER_ID;
-    const assetsId = process.env.NEXT_PUBLIC_ASSETS_CANISTER_ID;
 
-    if (viTokenId && accessControlId && assetsId) {
+    if (viTokenId && accessControlId && assetsFromDomain) {
       return { 
         viToken: viTokenId, 
         accessControl: accessControlId,
-        assets: assetsId 
+        assets: assetsFromDomain 
       };
     }
 
-    // For local development, try to read from .dfx/local/canister_ids.json
+    // For local development, try to read from canister_ids.json
     const isLocal = !window.location.host.endsWith("ic0.app");
     if (isLocal) {
       try {
         // In development, we'll use a fetch to get the canister IDs
-        // This assumes the .dfx/local/canister_ids.json is served by the dev server
         const response = await fetch('/canister_ids.json');
         if (response.ok) {
           const canisterIds = await response.json();
           return {
             viToken: canisterIds.vi_token?.local,
             accessControl: canisterIds.vidrune_access_control?.local,
-            assets: canisterIds.vidrune_assets?.local,
+            assets: assetsFromDomain || canisterIds.vidrune_assets?.local,
           };
         }
       } catch (error) {
@@ -41,15 +69,14 @@ export async function getCanisterIds(): Promise<CanisterIds | null> {
       }
 
       // Fallback to typical local development IDs
-      // These will be replaced when the deployment script runs
       return {
         viToken: "rrkah-fqaaa-aaaaa-aaaaq-cai",
         accessControl: "rdmx6-jaaaa-aaaaa-aaadq-cai", 
-        assets: "rno2w-sqaaa-aaaaa-aaacq-cai",
+        assets: assetsFromDomain || "rno2w-sqaaa-aaaaa-aaacq-cai",
       };
     }
 
-    // For IC mainnet, we need environment variables
+    // For IC mainnet, we need environment variables for other canisters
     console.error("No canister IDs found for mainnet deployment");
     return null;
   } catch (error) {
@@ -65,9 +92,14 @@ export function validateCanisterIds(ids: CanisterIds | null): boolean {
   // Basic validation - canister IDs should be valid principals
   const canisterIdRegex = /^[a-z0-9]{5}-[a-z0-9]{5}-[a-z0-9]{5}-[a-z0-9]{5}-[a-z0-9]{3}$/;
   
+  // For assets, allow special development identifiers
+  const isValidAssetsId = canisterIdRegex.test(ids.assets) || 
+                         ids.assets === "localhost-assets" ||
+                         ids.assets.startsWith("localhost");
+  
   return (
     canisterIdRegex.test(ids.viToken) &&
     canisterIdRegex.test(ids.accessControl) &&
-    canisterIdRegex.test(ids.assets)
+    isValidAssetsId
   );
 }
