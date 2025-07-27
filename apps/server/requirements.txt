@@ -1,0 +1,45 @@
+# Flask and web framework dependencies
+Flask==3.0.0
+flask-cors==4.0.0
+Werkzeug==3.0.1
+
+# spaCy and NLP dependencies
+spacy==3.7.2
+https://github.com/explosion/spacy-models/releases/download/en_core_web_md-3.7.1/en_core_web_md-3.7.1-py3-none-any.whl
+
+# Scientific computing and data processing
+numpy==1.24.3
+scipy==1.11.4
+
+# Internet Computer client dependencies
+ic-py==2.6.0
+requests==2.31.0
+backoff==2.2.1
+
+# Data handling and serialization
+pydantic==2.5.0
+python-dateutil==2.8.2
+
+# Caching and performance
+cachetools==5.3.2
+
+# Logging and monitoring
+structlog==23.2.0
+
+# Development and testing dependencies (optional)
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+scikit-learn==1.3.2
+
+# System monitoring
+psutil==5.9.6
+
+# Type checking
+mypy==1.7.1
+types-requests==2.31.0.10
+
+# Code formatting and linting
+black==23.11.0
+flake8==6.1.0
+isort==5.12.0
