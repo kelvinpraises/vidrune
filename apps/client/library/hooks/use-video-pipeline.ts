@@ -1,12 +1,9 @@
-import { useCallback, useState, useRef, useEffect } from 'react';
-import useCaptureStills from './use-capture-stills';
-import { Florence2Service } from '../services/florence2-service';
-import { KokoroService } from '../services/kokoro-service';
+import { useCallback, useState, useRef, useEffect } from "react";
+import useCaptureStills from "./use-capture-stills";
+import { Florence2Service } from "../services/florence2-service";
+import { KokoroService } from "../services/kokoro-service";
 
-interface Scene {
-  description: string;
-  keywords: string[];
-}
+type PipelineStage = "idle" | "capturing" | "captioning" | "generating-audio" | "complete";
 
 interface ProcessedScene {
   imageUrl: string;
@@ -24,12 +21,14 @@ interface ModelProgress {
 }
 
 interface PipelineState {
-  viseBin: ProcessedScene[];
-  florence2Bin: ProcessedScene[];
-  kokoroBin: ProcessedScene[];
-  completed: ProcessedScene[];
-  currentStage: 'idle' | 'vise' | 'florence2' | 'kokoro' | 'complete';
-  progress: number;
+  allScenes: ProcessedScene[];
+  currentStage: PipelineStage;
+  progress: {
+    stage: string;
+    current: number;
+    total: number;
+    percentage: number;
+  };
   modelsLoaded: {
     florence2: boolean;
     kokoro: boolean;
@@ -41,461 +40,545 @@ interface PipelineState {
   error?: string;
 }
 
-export const useVideoPipeline = () => {
-  const [pipelineState, setPipelineState] = useState<PipelineState>({
-    viseBin: [],
-    florence2Bin: [],
-    kokoroBin: [],
-    completed: [],
-    currentStage: 'idle',
-    progress: 0,
-    modelsLoaded: {
-      florence2: false,
-      kokoro: false
-    },
+const INITIAL_PIPELINE_STATE: PipelineState = {
+  allScenes: [],
+  currentStage: "idle",
+  progress: {
+    stage: "Waiting",
+    current: 0,
+    total: 0,
+    percentage: 0,
+  },
+  modelsLoaded: {
+    florence2: false,
+    kokoro: false,
+  },
+  modelProgress: {
+    florence2: { status: "initializing" },
+    kokoro: { status: "initializing" },
+  },
+};
+
+// Helper functions for state updates
+const updateProgress = (stage: string, current: number, total: number) => ({
+  stage,
+  current,
+  total,
+  percentage: total > 0 ? Math.round((current / total) * 100) : 0,
+});
+
+const updateModelProgress =
+  (model: "florence2" | "kokoro", progress: Partial<ModelProgress>) =>
+  (prev: PipelineState) => ({
+    ...prev,
     modelProgress: {
-      florence2: { status: 'initializing' },
-      kokoro: { status: 'initializing' }
-    }
+      ...prev.modelProgress,
+      [model]: { ...prev.modelProgress[model], ...progress },
+    },
+    modelsLoaded: {
+      ...prev.modelsLoaded,
+      [model]: progress.status === "ready" || progress.status === "complete" || prev.modelsLoaded[model],
+    },
   });
 
+const updateSceneInList = (
+  scenes: ProcessedScene[],
+  targetScene: ProcessedScene,
+  updates: Partial<ProcessedScene>
+) =>
+  scenes.map((scene) =>
+    scene.imageUrl === targetScene.imageUrl ? { ...scene, ...updates } : scene
+  );
+
+const getProgressStatus = (status: string, data?: string): string => {
+  switch (status) {
+    case "loading":
+      return data || "Loading model...";
+    case "initiate":
+      return "Starting download...";
+    case "progress":
+      return "Downloading...";
+    case "done":
+      return "Processing...";
+    case "ready":
+      return "Ready";
+    case "complete":
+      return "Ready";
+    case "error":
+      return "Error";
+    case "device":
+      return `Using ${data} device`;
+    default:
+      return status;
+  }
+};
+
+const formatSRTTime = (seconds: number): string => {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  const ms = Math.floor((seconds % 1) * 1000);
+  return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs
+    .toString()
+    .padStart(2, "0")},${ms.toString().padStart(3, "0")}`;
+};
+
+export const useVideoPipeline = () => {
+  const [pipelineState, setPipelineState] = useState<PipelineState>(INITIAL_PIPELINE_STATE);
   const [isProcessing, setIsProcessing] = useState(false);
-  const processingRef = useRef(false);
-  
-  // WebGPU Services
+  const processingStage = useRef<PipelineStage>("idle");
   const florence2Service = useRef<Florence2Service | null>(null);
   const kokoroService = useRef<KokoroService | null>(null);
 
-  // Initialize WebGPU services
+  // Initialize services
   useEffect(() => {
-    // Initialize Florence2 service and track auto-initialization
-    if (!florence2Service.current) {
-      const service = new Florence2Service();
-      florence2Service.current = service;
-      
-      // Hook into the auto-init process by monitoring worker messages
-      const originalWorker = service.getWorker();
-      if (originalWorker) {
-        const handleProgress = (e: MessageEvent) => {
-          const { status, data } = e.data;
-          
-          switch (status) {
-            case 'loading':
-              setPipelineState(prev => ({
-                ...prev,
-                modelProgress: {
-                  ...prev.modelProgress,
-                  florence2: { status: data || 'Loading model...' }
-                }
-              }));
-              break;
-            
-            case 'initiate':
-            case 'progress':
-            case 'done':
-              if (e.data.progress !== undefined || e.data.total !== undefined) {
-                setPipelineState(prev => ({
-                  ...prev,
-                  modelProgress: {
-                    ...prev.modelProgress,
-                    florence2: {
-                      status: status === 'initiate' ? 'Starting download...' : 
-                             status === 'progress' ? 'Downloading...' : 'Processing...',
-                      progress: e.data.progress,
-                      total: e.data.total,
-                      file: e.data.file
-                    }
-                  }
-                }));
-              }
-              break;
-            
-            case 'ready':
-              setPipelineState(prev => ({
-                ...prev,
-                modelsLoaded: { ...prev.modelsLoaded, florence2: true },
-                modelProgress: {
-                  ...prev.modelProgress,
-                  florence2: { status: 'ready' }
-                }
-              }));
-              break;
-            
-            case 'error':
-              setPipelineState(prev => ({
-                ...prev,
-                error: `Florence2 model failed to load: ${data}`,
-                modelProgress: {
-                  ...prev.modelProgress,
-                  florence2: { status: 'error' }
-                }
-              }));
-              break;
-          }
-        };
-        
-        originalWorker.addEventListener('message', handleProgress);
-      }
-    }
+    let isMounted = true;
 
-    // Initialize Kokoro service
-    if (!kokoroService.current) {
-      const kokoroServiceInstance = new KokoroService();
-      kokoroService.current = kokoroServiceInstance;
-      
-      // Track Kokoro loading progress
-      setPipelineState(prev => ({
-        ...prev,
-        modelProgress: {
-          ...prev.modelProgress,
-          kokoro: { status: 'loading model...' }
+    const initializeServices = async () => {
+      try {
+        // Initialize Florence2
+        if (!florence2Service.current) {
+          florence2Service.current = new Florence2Service();
+
+          const handleFlorence2Progress = (e: MessageEvent) => {
+            if (!isMounted) return;
+            const { status, data } = e.data;
+
+            setPipelineState((prev) => ({
+              ...prev,
+              modelProgress: {
+                ...prev.modelProgress,
+                florence2: {
+                  status: getProgressStatus(status, data),
+                  progress: e.data.progress,
+                  total: e.data.total,
+                  file: e.data.file,
+                },
+              },
+              modelsLoaded: {
+                ...prev.modelsLoaded,
+                florence2: status === "ready" || status === "complete",
+              },
+              error: status === "error" ? `Florence2 model failed: ${data}` : prev.error,
+            }));
+          };
+
+          florence2Service.current
+            .getWorker()
+            ?.addEventListener("message", handleFlorence2Progress);
         }
-      }));
-      
-      // Hook into Kokoro worker messages for progress tracking
-      const kokoroWorker = kokoroServiceInstance.getWorker();
-      if (kokoroWorker) {
-        const handleKokoroProgress = (e: MessageEvent) => {
-          const { status } = e.data;
-          
-          switch (status) {
-            case 'device':
-              setPipelineState(prev => ({
+
+        // Initialize Kokoro
+        if (!kokoroService.current) {
+          kokoroService.current = new KokoroService();
+
+          const handleKokoroProgress = (e: MessageEvent) => {
+            if (!isMounted) return;
+            const { status, data } = e.data;
+
+            setPipelineState((prev) => ({
+              ...prev,
+              modelProgress: {
+                ...prev.modelProgress,
+                kokoro: {
+                  status: getProgressStatus(status, data || e.data.device),
+                  progress: e.data.progress,
+                  total: e.data.total,
+                  file: e.data.file,
+                },
+              },
+              modelsLoaded: {
+                ...prev.modelsLoaded,
+                kokoro: status === "ready" || status === "complete",
+              },
+              error:
+                status === "error" ? `Kokoro model failed: ${e.data.error}` : prev.error,
+            }));
+          };
+
+          kokoroService.current
+            .getWorker()
+            ?.addEventListener("message", handleKokoroProgress);
+
+          try {
+            await kokoroService.current.waitForModelLoad();
+          } catch (error) {
+            if (isMounted) {
+              setPipelineState((prev) => ({
                 ...prev,
-                modelProgress: {
-                  ...prev.modelProgress,
-                  kokoro: { status: `Using ${e.data.device} device` }
-                }
+                error: `Kokoro initialization failed: ${
+                  error instanceof Error ? error.message : "Unknown error"
+                }`,
               }));
-              break;
-              
-            case 'loading':
-              setPipelineState(prev => ({
-                ...prev,
-                modelProgress: {
-                  ...prev.modelProgress,
-                  kokoro: { status: 'Loading TTS model...' }
-                }
-              }));
-              break;
-              
-            case 'progress':
-              if (e.data.progress !== undefined && e.data.total !== undefined) {
-                setPipelineState(prev => ({
-                  ...prev,
-                  modelProgress: {
-                    ...prev.modelProgress,
-                    kokoro: {
-                      status: 'Downloading TTS model...',
-                      progress: e.data.progress,
-                      total: e.data.total,
-                      file: e.data.file
-                    }
-                  }
-                }));
-              }
-              break;
-              
-            case 'ready':
-              setPipelineState(prev => ({
-                ...prev,
-                modelsLoaded: { ...prev.modelsLoaded, kokoro: true },
-                modelProgress: {
-                  ...prev.modelProgress,
-                  kokoro: { status: 'ready' }
-                }
-              }));
-              break;
-              
-            case 'error':
-              setPipelineState(prev => ({
-                ...prev,
-                error: `Kokoro model failed to load: ${e.data.error}`,
-                modelProgress: {
-                  ...prev.modelProgress,
-                  kokoro: { status: 'error' }
-                }
-              }));
-              break;
+            }
           }
-        };
-        
-        kokoroWorker.addEventListener('message', handleKokoroProgress);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setPipelineState((prev) => ({
+            ...prev,
+            error: `Service initialization failed: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
+          }));
+        }
       }
-      
-      // Wait for Kokoro model to load as fallback
-      kokoroServiceInstance.waitForModelLoad().then(() => {
-        setPipelineState(prev => ({
-          ...prev,
-          modelsLoaded: { ...prev.modelsLoaded, kokoro: true },
-          modelProgress: {
-            ...prev.modelProgress,
-            kokoro: { status: 'ready' }
-          }
-        }));
-      }).catch((error) => {
-        setPipelineState(prev => ({
-          ...prev,
-          error: `Kokoro model failed to load: ${error.message}`,
-          modelProgress: {
-            ...prev.modelProgress,
-            kokoro: { status: 'error' }
-          }
-        }));
-      });
-    }
+    };
+
+    initializeServices();
 
     return () => {
+      isMounted = false;
       florence2Service.current?.dispose();
       kokoroService.current?.dispose();
     };
   }, []);
 
-  // VISE Engine (existing capture hooks)
   const {
     videoRef,
     canvasRef,
     sceneRef,
     slicedRef,
-    startPolling,
-    stopPolling,
-    startUploadPolling,
-    stopUploadPolling,
     capturedScenes,
     processStatus,
-    lastEvent
-  } = useCaptureStills();
+    lastEvent,
+    resetCapture,
+    clearAllCaptures,
+  } = useCaptureStills(isProcessing);
 
-  // Sequential pipeline orchestrator
-  const processNextItem = useCallback(async () => {
-    if (processingRef.current) return;
-    processingRef.current = true;
-
-    try {
-      const currentState = pipelineState;
-
-      // Process VISE bin -> Florence2
-      if (currentState.viseBin.length > 0) {
-        setPipelineState(prev => ({ ...prev, currentStage: 'florence2' }));
-        const scene = currentState.viseBin[0];
-        
-        if (florence2Service.current && currentState.modelsLoaded.florence2) {
-          try {
-            const { result } = await florence2Service.current.generateCaption(
-              scene.imageUrl,
-              '<DETAILED_CAPTION>'
-            );
-            
-            const captionedScene = {
-              ...scene,
-              caption: result['<DETAILED_CAPTION>'] as string || `Scene at ${scene.timestamp.toFixed(1)}s`,
-              processed: true
-            };
-            
-            setPipelineState(prev => ({
-              ...prev,
-              viseBin: prev.viseBin.slice(1),
-              florence2Bin: [...prev.florence2Bin, captionedScene]
-            }));
-          } catch (error) {
-            console.error('Florence2 processing error:', error);
-            // Fallback to basic caption
-            const captionedScene = {
-              ...scene,
-              caption: `Scene at ${scene.timestamp.toFixed(1)}s: Video frame`,
-              processed: true
-            };
-            
-            setPipelineState(prev => ({
-              ...prev,
-              viseBin: prev.viseBin.slice(1),
-              florence2Bin: [...prev.florence2Bin, captionedScene]
-            }));
-          }
-        }
-      }
-      // Process Florence2 bin -> Kokoro
-      else if (currentState.florence2Bin.length > 0) {
-        setPipelineState(prev => ({ ...prev, currentStage: 'kokoro' }));
-        const scene = currentState.florence2Bin[0];
-        
-        if (kokoroService.current && currentState.modelsLoaded.kokoro && scene.caption) {
-          try {
-            const audioResult = await kokoroService.current.generateAudio(
-              scene.caption,
-              'af_heart' // Default voice
-            );
-            
-            const audioScene = {
-              ...scene,
-              audioUrl: audioResult.audio,
-              processed: true
-            };
-            
-            setPipelineState(prev => ({
-              ...prev,
-              florence2Bin: prev.florence2Bin.slice(1),
-              kokoroBin: [...prev.kokoroBin, audioScene]
-            }));
-          } catch (error) {
-            console.error('Kokoro processing error:', error);
-            // Move to kokoro bin without audio
-            setPipelineState(prev => ({
-              ...prev,
-              florence2Bin: prev.florence2Bin.slice(1),
-              kokoroBin: [...prev.kokoroBin, { ...scene, processed: true }]
-            }));
-          }
-        }
-      }
-      // Process Kokoro bin -> Completed
-      else if (currentState.kokoroBin.length > 0) {
-        const scene = currentState.kokoroBin[0];
-        
-        setPipelineState(prev => {
-          const newState = {
-            ...prev,
-            kokoroBin: prev.kokoroBin.slice(1),
-            completed: [...prev.completed, scene]
-          };
-          
-          // Check if pipeline is complete
-          if (newState.kokoroBin.length === 0 && newState.florence2Bin.length === 0 && newState.viseBin.length === 0) {
-            newState.currentStage = 'complete';
-          }
-          
-          // Update progress
-          const totalScenes = newState.viseBin.length + newState.florence2Bin.length + newState.kokoroBin.length + newState.completed.length;
-          newState.progress = totalScenes > 0 ? (newState.completed.length / totalScenes) * 100 : 0;
-          
-          return newState;
-        });
-      } else {
-        setPipelineState(prev => ({ ...prev, currentStage: 'idle' }));
-      }
-    } catch (error) {
-      console.error('Pipeline processing error:', error);
-      setPipelineState(prev => ({
-        ...prev,
-        error: error instanceof Error ? error.message : 'Pipeline processing failed'
-      }));
-    }
-
-    processingRef.current = false;
-  }, [pipelineState]);
-
-  // Monitor VISE engine output and add to pipeline
+  // Stage 1: Capture all scenes first - wait for complete video processing
   useEffect(() => {
-    if (Object.keys(capturedScenes).length > 0) {
-      const newScenes = Object.entries(capturedScenes)
+    if (!isProcessing || processingStage.current !== "capturing") return;
+
+    const sceneEntries = Object.entries(capturedScenes);
+
+    // Update scenes as they come in
+    if (sceneEntries.length > 0) {
+      const newScenes: ProcessedScene[] = sceneEntries
         .map(([timestamp, imageUrl]) => ({
           imageUrl,
           timestamp: parseFloat(timestamp),
-          processed: false
+          processed: true,
         }))
-        .filter(scene => 
-          !pipelineState.viseBin.some(existing => existing.imageUrl === scene.imageUrl) &&
-          !pipelineState.completed.some(existing => existing.imageUrl === scene.imageUrl)
-        );
+        .filter((scene) => {
+          return !pipelineState.allScenes.some(
+            (existing) => existing.imageUrl === scene.imageUrl
+          );
+        });
 
       if (newScenes.length > 0) {
-        setPipelineState(prev => ({
+        setPipelineState((prev) => ({
           ...prev,
-          viseBin: [...prev.viseBin, ...newScenes]
+          allScenes: [...prev.allScenes, ...newScenes],
+          progress: updateProgress(
+            "Capturing scenes...",
+            prev.allScenes.length + newScenes.length,
+            prev.allScenes.length + newScenes.length
+          ),
         }));
       }
     }
-  }, [capturedScenes, pipelineState.viseBin, pipelineState.completed]);
 
-  // Auto-process pipeline when items are available
-  useEffect(() => {
-    if (isProcessing && !processingRef.current) {
-      const timer = setInterval(processNextItem, 500); // Process every 500ms
-      return () => clearInterval(timer);
+    // Move to captioning when capture is completely finished (video ended + all scenes processed)
+    const isVideoEnded = lastEvent === "video_end" || lastEvent === "all_complete";
+    const hasScenes = sceneEntries.length > 0;
+
+    if (isVideoEnded && hasScenes && processingStage.current === "capturing") {
+      processingStage.current = "captioning";
+
+      setPipelineState((prev) => ({
+        ...prev,
+        currentStage: "captioning",
+        progress: updateProgress(
+          "Capture complete, starting captions...",
+          sceneEntries.length,
+          sceneEntries.length
+        ),
+      }));
+
+      processAllCaptions();
     }
-  }, [isProcessing, processNextItem]);
+  }, [capturedScenes, lastEvent, isProcessing, pipelineState.allScenes.length]);
 
-  const startPipeline = useCallback(async () => {
-    setIsProcessing(true);
-    setPipelineState(prev => ({ ...prev, currentStage: 'vise', error: undefined }));
-    
-    // Models are auto-loaded on initialization, so we can start immediately
-    startPolling();
-    startUploadPolling();
-  }, [startPolling, startUploadPolling]);
+  // Stage 2: Process all captions at once
+  const processAllCaptions = useCallback(async () => {
+    if (!florence2Service.current || !pipelineState.modelsLoaded.florence2) {
+      return;
+    }
 
-  const stopPipeline = useCallback(() => {
-    setIsProcessing(false);
-    stopPolling();
-    stopUploadPolling();
-    setPipelineState(prev => ({ ...prev, currentStage: 'idle' }));
-  }, [stopPolling, stopUploadPolling]);
+    if (processingStage.current !== "captioning") {
+      return;
+    }
 
-  const generateSRTFile = useCallback(() => {
-    const srtContent = pipelineState.completed
-      .sort((a, b) => a.timestamp - b.timestamp)
-      .map((scene, index) => {
-        const start = formatSRTTime(scene.timestamp);
-        const end = formatSRTTime(scene.timestamp + 3); // 3 second duration
-        return `${index + 1}\n${start} --> ${end}\n${scene.caption || 'Scene description'}\n`;
-      })
-      .join('\n');
+    const sceneEntries = Object.entries(capturedScenes);
+    const scenesToCaption: ProcessedScene[] = sceneEntries.map(([timestamp, imageUrl]) => ({
+      imageUrl,
+      timestamp: parseFloat(timestamp),
+      processed: true,
+    }));
 
-    const blob = new Blob([srtContent], { type: 'text/srt' });
-    const url = URL.createObjectURL(blob);
-    return url;
-  }, [pipelineState.completed]);
+    setPipelineState((prev) => ({
+      ...prev,
+      allScenes: scenesToCaption,
+      currentStage: "captioning",
+      progress: updateProgress("Generating captions...", 0, scenesToCaption.length),
+    }));
 
-  const generateMetadata = useCallback(() => {
-    const metadata = {
-      id: `video_${Date.now()}`,
-      title: 'Processed Video',
-      uploadedBy: 'User',
-      description: 'Video processed through local pipeline',
-      capturedImages: pipelineState.completed.map(scene => scene.imageUrl),
-      cover: pipelineState.completed[0]?.imageUrl || '',
-      summary: `Video with ${pipelineState.completed.length} processed scenes`,
-      scenes: pipelineState.completed.map(scene => ({
-        description: scene.caption || 'Scene description',
-        keywords: ['video', 'scene', 'processed']
-      }))
+    try {
+      const captionedScenes: ProcessedScene[] = [];
+
+      for (let i = 0; i < scenesToCaption.length; i++) {
+        const scene = scenesToCaption[i];
+
+        const { result } = await florence2Service.current.generateCaption(
+          scene.imageUrl,
+          "<DETAILED_CAPTION>"
+        );
+        const caption = result["<DETAILED_CAPTION>"] as string;
+
+        const updatedScene = { ...scene, caption };
+        captionedScenes.push(updatedScene);
+
+        setPipelineState((prev) => ({
+          ...prev,
+          allScenes: updateSceneInList(prev.allScenes, scene, { caption }),
+          progress: updateProgress("Generating captions...", i + 1, scenesToCaption.length),
+        }));
+      }
+
+      processingStage.current = "generating-audio";
+      processAllAudio(captionedScenes);
+    } catch (error) {
+      setPipelineState((prev) => ({
+        ...prev,
+        error: `Captioning failed: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
+      }));
+    }
+  }, [capturedScenes, pipelineState.modelsLoaded.florence2]);
+
+  // Stage 3: Generate all audio at once - only after captions are complete
+  const processAllAudio = useCallback(
+    async (scenesWithCaptions?: ProcessedScene[]) => {
+      if (!kokoroService.current || !pipelineState.modelsLoaded.kokoro) {
+        return;
+      }
+
+      if (processingStage.current !== "generating-audio") {
+        return;
+      }
+
+      const scenesToProcess =
+        scenesWithCaptions || pipelineState.allScenes.filter((scene) => scene.caption);
+
+      setPipelineState((prev) => ({
+        ...prev,
+        currentStage: "generating-audio",
+        progress: updateProgress("Generating audio...", 0, scenesToProcess.length),
+      }));
+
+      try {
+        for (let i = 0; i < scenesToProcess.length; i++) {
+          const scene = scenesToProcess[i];
+
+          try {
+            const audioResult = await kokoroService.current.generateAudio(scene.caption!);
+
+            setPipelineState((prev) => ({
+              ...prev,
+              allScenes: updateSceneInList(prev.allScenes, scene, {
+                audioUrl: audioResult.audio,
+                processed: true,
+              }),
+              progress: updateProgress(
+                "Generating audio...",
+                i + 1,
+                scenesToProcess.length
+              ),
+            }));
+          } catch (sceneError) {
+            setPipelineState((prev) => ({
+              ...prev,
+              progress: updateProgress(
+                "Generating audio...",
+                i + 1,
+                scenesToProcess.length
+              ),
+            }));
+          }
+        }
+      } catch (error) {
+        // Continue to completion even if audio fails
+      }
+
+      processingStage.current = "complete";
+      setIsProcessing(false);
+
+      setPipelineState((prev) => ({
+        ...prev,
+        currentStage: "complete",
+        progress: updateProgress("Complete!", prev.allScenes.length, prev.allScenes.length),
+      }));
+    },
+    [pipelineState.allScenes, pipelineState.modelsLoaded.kokoro]
+  );
+
+  // Auto-advance when video ends and no new scenes are being captured
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const handleVideoEnd = () => {
+      if (isProcessing && processingStage.current === "capturing") {
+        setTimeout(() => {
+          const sceneEntries = Object.entries(capturedScenes);
+          if (sceneEntries.length > 0) {
+            processingStage.current = "captioning";
+
+            setPipelineState((prev) => ({
+              ...prev,
+              currentStage: "captioning",
+              progress: updateProgress(
+                "Video complete, starting captions...",
+                sceneEntries.length,
+                sceneEntries.length
+              ),
+            }));
+
+            processAllCaptions();
+          }
+        }, 1000);
+      }
     };
 
-    return metadata;
-  }, [pipelineState.completed]);
+    video.addEventListener("ended", handleVideoEnd);
+    return () => video.removeEventListener("ended", handleVideoEnd);
+  }, [isProcessing, capturedScenes, processAllCaptions]);
+
+  const startPipeline = useCallback(() => {
+    resetCapture();
+    processingStage.current = "capturing";
+    setIsProcessing(true);
+    setPipelineState((prev) => ({
+      ...prev,
+      currentStage: "capturing",
+      error: undefined,
+      allScenes: [],
+      progress: updateProgress("Starting capture...", 0, 0),
+    }));
+
+    const video = videoRef.current;
+    if (video) {
+      video.play().catch(() => {});
+    }
+  }, [videoRef, pipelineState.modelsLoaded, resetCapture]);
+
+  const stopPipeline = useCallback(() => {
+    processingStage.current = "idle";
+    setIsProcessing(false);
+    videoRef.current?.pause();
+    setPipelineState((prev) => ({ ...prev, currentStage: "idle" }));
+  }, [videoRef]);
+
+  const resetPipeline = useCallback(() => {
+    // Clean up any audio blob URLs from processed scenes
+    pipelineState.allScenes.forEach(scene => {
+      if (scene.audioUrl && scene.audioUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(scene.audioUrl);
+      }
+    });
+    
+    processingStage.current = "idle";
+    setIsProcessing(false);
+    
+    // Reset pipeline state but preserve model loading states
+    setPipelineState(prev => ({
+      ...INITIAL_PIPELINE_STATE,
+      // Preserve model loading states and progress
+      modelsLoaded: prev.modelsLoaded,
+      modelProgress: prev.modelProgress,
+    }));
+    
+    videoRef.current?.pause();
+    clearAllCaptures();
+  }, [videoRef, clearAllCaptures, pipelineState.allScenes]);
+
+  const generateSRTFile = useCallback(() => {
+    const sortedScenes = pipelineState.allScenes
+      .filter((scene) => scene.caption)
+      .sort((a, b) => a.timestamp - b.timestamp);
+    
+    const srtContent = sortedScenes
+      .map((scene, index) => {
+        const start = formatSRTTime(scene.timestamp);
+        // Calculate end time: either 3 seconds later or until next scene
+        const nextScene = sortedScenes[index + 1];
+        const duration = nextScene 
+          ? Math.min(3, nextScene.timestamp - scene.timestamp)
+          : 3;
+        const end = formatSRTTime(scene.timestamp + duration);
+        return `${index + 1}\n${start} --> ${end}\n${scene.caption}\n`;
+      })
+      .join("\n\n");
+
+    const blob = new Blob([srtContent], { type: "text/srt" });
+    return URL.createObjectURL(blob);
+  }, [pipelineState.allScenes]);
+
+  const generateMetadata = useCallback(() => {
+    const completedScenes = pipelineState.allScenes.filter((scene) => scene.processed);
+
+    return {
+      id: `video_${Date.now()}`,
+      title: "Processed Video",
+      uploadedBy: "User",
+      description: "Video processed through local pipeline",
+      uploadTime: Date.now(),
+      assetBaseUrl: "",
+      assets: {
+        video: "",
+        captions: "captions.srt",
+        ttsAudio: "tts-audio.wav",
+        scenes: completedScenes.map(
+          (_, index) => `scenes/scene-${String(index + 1).padStart(3, "0")}.jpg`
+        ),
+      },
+      summary: `Video with ${completedScenes.length} processed scenes`,
+      scenes: completedScenes.map((scene) => ({
+        description: scene.caption || "Scene description",
+        keywords: ["video", "scene", "processed"],
+      })),
+      searchableContent: {
+        transcription: completedScenes
+          .map((s) => s.caption)
+          .filter(Boolean)
+          .join(" "),
+        sceneDescriptions: completedScenes
+          .map((s) => s.caption)
+          .filter(Boolean)
+          .join(" "),
+        ttsContent: completedScenes
+          .map((s) => s.caption)
+          .filter(Boolean)
+          .join(" "),
+      },
+    };
+  }, [pipelineState.allScenes]);
 
   return {
-    // VISE engine refs
     videoRef,
     canvasRef,
     sceneRef,
     slicedRef,
-    
-    // Pipeline state
     pipelineState,
     isProcessing,
-    
-    // Pipeline controls
     startPipeline,
     stopPipeline,
-    
-    // File generation
+    resetPipeline,
     generateSRTFile,
     generateMetadata,
-    
-    // VISE engine status
     viseStatus: processStatus,
-    viseEvent: lastEvent
+    viseEvent: lastEvent,
   };
 };
-
-// Helper functions
-
-function formatSRTTime(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = Math.floor(seconds % 60);
-  const ms = Math.floor((seconds % 1) * 1000);
-  
-  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`;
-}
