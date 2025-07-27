@@ -1,0 +1,56 @@
+# Vercel ignore file
+# Ignore test files and development artifacts
+
+# Tests
+tests/
+*.test.py
+test_*.py
+*_test.py
+
+# Development files
+.pytest_cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Documentation
+README.md
+docs/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Environment files (use Vercel environment variables instead)
+.env
+.env.local
+.env.development
+.env.production
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+
+# Coverage reports
+htmlcov/
+.coverage
+coverage.xml
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# OS files
+.DS_Store
+Thumbs.db
