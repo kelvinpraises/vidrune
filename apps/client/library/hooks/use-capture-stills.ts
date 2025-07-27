@@ -2,36 +2,30 @@ import { useCallback, useRef, useState } from "react";
 
 import useCaptureCanvas from "@/library/hooks/use-capture-canvas";
 import useColourAnalysis from "@/library/hooks/use-colour-analysis";
-import useFileUpload from "@/library/hooks/use-file-upload";
 import usePollingEffect from "@/library/hooks/use-polling-effect";
 
-type ProcessStatus = "idle" | "capturing" | "uploading" | "complete";
+type ProcessStatus = "idle" | "capturing" | "complete";
 type ProcessEvent =
   | "capture_start"
   | "capture_end"
-  | "upload_start"
-  | "upload_end"
   | "video_end"
   | "all_complete";
 
-const useCaptureStills = () => {
+const useCaptureStills = (isProcessing?: boolean) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const slicedRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<HTMLDivElement>(null);
   const colorsRef = useRef<{ r: number; g: number; b: number }[]>([]);
-  const [capturedImages, setCapturedImages] = useState<string[]>([]);
   const [capturedScenes, setCapturedScenes] = useState<Record<number, string>>(
     {}
   );
-  const uploadQueueRef = useRef<{ file: File; timestamp: number }[]>([]);
-  const lastUploadTimeRef = useRef<number>(0);
   const [processStatus, setProcessStatus] = useState<ProcessStatus>("idle");
   const [lastEvent, setLastEvent] = useState<ProcessEvent | null>(null);
   const videoEndedRef = useRef<boolean>(false);
+  const captureCompleteRef = useRef<boolean>(false);
 
   const { canvasRef, setUpCanvas } = useCaptureCanvas(videoRef);
   const { getAverageColor, compareColorSimilarity } = useColourAnalysis();
-  const { uploadFile, setFile } = useFileUpload();
 
   const updateProcessStatus = useCallback((event: ProcessEvent) => {
     setLastEvent(event);
@@ -39,18 +33,15 @@ const useCaptureStills = () => {
       case "capture_start":
         setProcessStatus("capturing");
         break;
-      case "upload_start":
-        setProcessStatus("uploading");
-        break;
       case "video_end":
         videoEndedRef.current = true;
         console.log(
-          "Video playback has ended. Processing remaining captures..."
+          "Video playback has ended. Processing captures complete."
         );
         break;
       case "all_complete":
         setProcessStatus("complete");
-        console.log("All captures have been processed and uploaded.");
+        console.log("All captures have been processed.");
         break;
       default:
         break;
@@ -161,79 +152,71 @@ const useCaptureStills = () => {
     });
   }, [captureImage]);
 
-  const processUploadQueue = useCallback(async () => {
-    const now = Date.now();
-    if (now - lastUploadTimeRef.current < 1500) {
-      return; // Wait at least 5 seconds between uploads
-    }
-
-    const nextUpload = uploadQueueRef.current.shift();
-    if (nextUpload) {
-      try {
-        updateProcessStatus("upload_start");
-        const url = await uploadFile({ file2: nextUpload.file });
-        if (url) {
-          setCapturedImages((prev) => [...prev, url]);
-          setCapturedScenes((prev) => {
-            const timestamp = Math.floor(nextUpload.timestamp);
-            return { ...prev, [timestamp]: url };
-          });
-        }
-      } catch (error) {
-        console.error("Error uploading file:", error);
-        uploadQueueRef.current.unshift(nextUpload);
-      } finally {
-        updateProcessStatus("upload_end");
-        lastUploadTimeRef.current = now;
-      }
-    }
-
-    console.log(uploadQueueRef.current.length);
-
-    if (uploadQueueRef.current.length === 0 && videoEndedRef.current) {
-      updateProcessStatus("all_complete");
-    }
-  }, [uploadFile, updateProcessStatus]);
 
   const captureScene = useCallback(() => {
     const scene = sceneRef.current;
     const video = videoRef.current;
 
-    if (!scene || !video) {
-      console.error("No scene ref or video ref");
+    // Stop polling if capture is complete
+    if (captureCompleteRef.current || !scene || !video || !isProcessing) {
       return;
     }
 
     captureImage(async ({ clone, similar }) => {
       if (!similar) {
-        const fileName = `capture_${Date.now()}.jpg`;
-
         clone.toBlob(async (blob) => {
           if (blob) {
-            const file = new File([blob], fileName, { type: "image/jpeg" });
-            uploadQueueRef.current.push({ file, timestamp: video.currentTime });
+            const blobUrl = URL.createObjectURL(blob);
+            const timestamp = video.currentTime;
+            setCapturedScenes((prev) => ({
+              ...prev,
+              [timestamp]: blobUrl
+            }));
           }
         }, "image/jpeg");
       }
-      if (video.ended) {
+      
+      // Check for video end more aggressively
+      if ((video.ended || video.paused) && !captureCompleteRef.current) {
+        console.log('Video ended/paused - finalizing capture');
+        captureCompleteRef.current = true;
         updateProcessStatus("video_end");
+        updateProcessStatus("all_complete");
       }
     });
-  }, [captureImage, updateProcessStatus]);
+  }, [captureImage, updateProcessStatus, isProcessing]);
 
-  const [stopPolling, startPolling] = usePollingEffect(captureScene, [], {
-    interval: 1000,
+  usePollingEffect(captureScene, [isProcessing], {
+    interval: 500, // Faster polling for smoother movement
     onCleanUp: () => {},
   });
 
-  const [stopUploadPolling, startUploadPolling] = usePollingEffect(
-    processUploadQueue,
-    [],
-    {
-      interval: 1000,
-      onCleanUp: () => {},
-    }
-  );
+  // Reset function to clear state for new processing (but preserve captured scenes)
+  const resetCapture = useCallback(() => {
+    captureCompleteRef.current = false;
+    videoEndedRef.current = false;
+    setProcessStatus("idle");
+    setLastEvent(null);
+    colorsRef.current = [];
+    // Note: NOT clearing setCapturedScenes - preserving blob URLs for pipeline
+  }, []);
+
+  // Separate function to fully clear everything (for complete reset)
+  const clearAllCaptures = useCallback(() => {
+    // Clean up blob URLs to prevent memory leaks
+    Object.values(capturedScenes).forEach(url => {
+      if (url.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+      }
+    });
+    
+    captureCompleteRef.current = false;
+    videoEndedRef.current = false;
+    setCapturedScenes({});
+    setProcessStatus("idle");
+    setLastEvent(null);
+    colorsRef.current = [];
+  }, [capturedScenes]);
 
   return {
     canvasRef,
@@ -241,14 +224,11 @@ const useCaptureStills = () => {
     sceneRef,
     videoRef,
     slicedRef,
-    stopPolling,
-    startPolling,
-    stopUploadPolling,
-    startUploadPolling,
-    capturedImages,
     capturedScenes,
     processStatus,
     lastEvent,
+    resetCapture,
+    clearAllCaptures,
   };
 };
 
