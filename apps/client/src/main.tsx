@@ -9,14 +9,15 @@ import {
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { StrictMode } from "react";
 import ReactDOM from "react-dom/client";
+import { z } from "zod";
 
 import ConsoleComponent from "@/app/console.tsx";
 import ExploreComponent from "@/app/explore.tsx";
 import HomeComponent from "@/app/index.tsx";
 import { Toaster } from "@/components/atoms/sonner";
 import RootProvider from "@/providers";
-import reportWebVitals from "./reportWebVitals.ts";
 import "@/styles/globals.css";
+import reportWebVitals from "./reportWebVitals.ts";
 
 const rootRoute = createRootRoute({
   component: () => (
@@ -39,6 +40,9 @@ const consoleRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "console",
   component: ConsoleComponent,
+  validateSearch: z.object({
+    test: z.boolean().optional(),
+  }),
 });
 
 const exploreRoute = createRoute({
@@ -49,7 +53,7 @@ const exploreRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([indexRoute, consoleRoute, exploreRoute]);
 
-const hashHistory = createHashHistory()
+const hashHistory = createHashHistory();
 const router = createRouter({
   routeTree,
   context: {},
@@ -57,7 +61,7 @@ const router = createRouter({
   scrollRestoration: true,
   defaultStructuralSharing: true,
   defaultPreloadStaleTime: 0,
-  history: hashHistory
+  history: hashHistory,
 });
 
 declare module "@tanstack/react-router" {

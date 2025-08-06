@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useLocation } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import { Download, HelpCircle, Pause, Play, RotateCcw, X } from "lucide-react";
 import {
@@ -51,8 +51,9 @@ function ConsoleComponent() {
   const [selectedVideo, setSelectedVideo] = useState<File | null>(null);
   const [activeTab, setActiveTab] = useState<"upload" | "my-videos">("upload");
 
-  // Test mode detection
-  const [isTestMode, setIsTestMode] = useState(false);
+  // Test mode detection - check if ?test exists in URL
+  const location = useLocation();
+  const isTestMode = location.search.test;
   const [videoMetadata, setVideoMetadata] = useState({
     title: "",
     description: "",
@@ -99,11 +100,7 @@ function ConsoleComponent() {
   );
 
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const testMode = urlParams.has("test");
-    setIsTestMode(testMode);
-
-    if (testMode) {
+    if (isTestMode) {
       console.log("🧪 Test mode activated - video processing will run locally");
     }
 
