@@ -67,22 +67,23 @@ const updateProgress = (stage: string, current: number, total: number) => ({
   percentage: total > 0 ? Math.round((current / total) * 100) : 0,
 });
 
-const updateModelProgress =
-  (model: "florence2" | "kokoro", progress: Partial<ModelProgress>) =>
-  (prev: PipelineState) => ({
-    ...prev,
-    modelProgress: {
-      ...prev.modelProgress,
-      [model]: { ...prev.modelProgress[model], ...progress },
-    },
-    modelsLoaded: {
-      ...prev.modelsLoaded,
-      [model]:
-        progress.status === "ready" ||
-        progress.status === "complete" ||
-        prev.modelsLoaded[model],
-    },
-  });
+// Helper function for updating model progress (unused but kept for future use)
+// const updateModelProgress =
+//   (model: "florence2" | "kokoro", progress: Partial<ModelProgress>) =>
+//   (prev: PipelineState) => ({
+//     ...prev,
+//     modelProgress: {
+//       ...prev.modelProgress,
+//       [model]: { ...prev.modelProgress[model], ...progress },
+//     },
+//     modelsLoaded: {
+//       ...prev.modelsLoaded,
+//       [model]:
+//         progress.status === "ready" ||
+//         progress.status === "complete" ||
+//         prev.modelsLoaded[model],
+//     },
+//   });
 
 const updateSceneInList = (
   scenes: ProcessedScene[],

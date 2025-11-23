@@ -81,7 +81,7 @@ async function load() {
     });
 
     console.log("[Florence2 Worker] Getting singleton instance...");
-    const [model, tokenizer, processor] = await Florence2Singleton.getInstance((x: any) => {
+    const [model, tokenizer, _processor] = await Florence2Singleton.getInstance((x: any) => {
       console.log("[Florence2 Worker] Progress:", x);
       self.postMessage(x);
     });

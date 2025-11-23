@@ -32,7 +32,7 @@ interface TokenFaucetProps {
   onBalanceUpdate: () => void;
 }
 
-export function TokenFaucet({ children, currentBalance, onBalanceUpdate }: TokenFaucetProps) {
+export function TokenFaucet({ children, currentBalance, onBalanceUpdate: _onBalanceUpdate }: TokenFaucetProps) {
   const [open, setOpen] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
   const isDesktop = useMediaQuery("(min-width: 768px)");

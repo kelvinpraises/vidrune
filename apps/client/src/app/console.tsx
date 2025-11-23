@@ -158,23 +158,24 @@ function ConsoleComponent() {
     [videoMetadata.title]
   );
 
-  const handleStartProcessing = useCallback(() => {
-    if (!selectedVideo) {
-      toast.error("Please select a video file first");
-      return;
-    }
+  // Unused - keeping for potential future use
+  // const handleStartProcessing = useCallback(() => {
+  //   if (!selectedVideo) {
+  //     toast.error("Please select a video file first");
+  //     return;
+  //   }
 
-    if (videoRef.current && selectedVideo) {
-      const videoUrl = URL.createObjectURL(selectedVideo);
-      videoRef.current.src = videoUrl;
-      videoRef.current.load();
+  //   if (videoRef.current && selectedVideo) {
+  //     const videoUrl = URL.createObjectURL(selectedVideo);
+  //     videoRef.current.src = videoUrl;
+  //     videoRef.current.load();
 
-      videoRef.current.onloadeddata = () => {
-        startPipeline();
-        toast.success("Video processing started!");
-      };
-    }
-  }, [selectedVideo, videoRef, startPipeline]);
+  //     videoRef.current.onloadeddata = () => {
+  //       startPipeline();
+  //       toast.success("Video processing started!");
+  //     };
+  //   }
+  // }, [selectedVideo, videoRef, startPipeline]);
 
   const handleStopProcessing = useCallback(() => {
     stopPipeline();
@@ -295,9 +296,10 @@ function ConsoleComponent() {
     }
   };
 
-  const handleClaimRewards = async () => {
-    toast.info("Reward claiming will be available in a future update!");
-  };
+  // Unused - keeping for potential future use
+  // const handleClaimRewards = async () => {
+  //   toast.info("Reward claiming will be available in a future update!");
+  // };
 
   const handleImageClick = useCallback((imageUrl: string, index: number) => {
     setSelectedImageUrl(imageUrl);

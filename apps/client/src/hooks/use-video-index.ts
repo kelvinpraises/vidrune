@@ -277,7 +277,7 @@ function extractKeywords(text: string): string[] {
     .slice(0, 20); // Limit to top 20 keywords
 }
 
-function getTextSnippet(text: string, matchIndex: number, matchLength: number, maxLength = 100): string {
+function getTextSnippet(text: string, matchIndex: number, _matchLength: number, maxLength = 100): string {
   const start = Math.max(0, matchIndex - Math.floor(maxLength / 2));
   const end = Math.min(text.length, start + maxLength);
   
