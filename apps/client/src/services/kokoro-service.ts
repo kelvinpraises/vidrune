@@ -26,15 +26,33 @@ export class KokoroService {
 
   constructor() {
     this.initWorker();
+    console.log("[Kokoro Service] Worker created:", this.worker ? 'SUCCESS' : 'FAILED');
   }
 
   private initWorker() {
-    this.worker = new Worker(
-      new URL('../workers/kokoro-worker.ts', import.meta.url),
-      { type: 'module' }
-    );
+    try {
+      this.worker = new Worker(
+        new URL('../workers/kokoro-worker.ts', import.meta.url),
+        { type: 'module' }
+      );
 
-    this.setupEventListeners();
+      // Add error handler to catch worker errors
+      this.worker.addEventListener('error', (error) => {
+        console.error('[Kokoro Service] Worker error:', error);
+        console.error('[Kokoro Service] Error message:', error.message);
+        console.error('[Kokoro Service] Error filename:', error.filename);
+        console.error('[Kokoro Service] Error lineno:', error.lineno);
+      });
+
+      this.worker.addEventListener('messageerror', (error) => {
+        console.error('[Kokoro Service] Worker message error:', error);
+      });
+
+      this.setupEventListeners();
+    } catch (error) {
+      console.error('[Kokoro Service] Failed to create worker:', error);
+      throw error;
+    }
   }
 
   private setupEventListeners() {

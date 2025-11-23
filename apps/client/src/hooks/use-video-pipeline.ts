@@ -77,17 +77,20 @@ const updateModelProgress =
     },
     modelsLoaded: {
       ...prev.modelsLoaded,
-      [model]: progress.status === "ready" || progress.status === "complete" || prev.modelsLoaded[model],
+      [model]:
+        progress.status === "ready" ||
+        progress.status === "complete" ||
+        prev.modelsLoaded[model],
     },
   });
 
 const updateSceneInList = (
   scenes: ProcessedScene[],
   targetScene: ProcessedScene,
-  updates: Partial<ProcessedScene>
+  updates: Partial<ProcessedScene>,
 ) =>
   scenes.map((scene) =>
-    scene.imageUrl === targetScene.imageUrl ? { ...scene, ...updates } : scene
+    scene.imageUrl === targetScene.imageUrl ? { ...scene, ...updates } : scene,
   );
 
 const getProgressStatus = (status: string, data?: string): string => {
@@ -229,8 +232,14 @@ export const useVideoPipeline = () => {
 
     return () => {
       isMounted = false;
-      florence2Service.current?.dispose();
-      kokoroService.current?.dispose();
+      if (florence2Service.current) {
+        florence2Service.current.dispose();
+        florence2Service.current = null;
+      }
+      if (kokoroService.current) {
+        kokoroService.current.dispose();
+        kokoroService.current = null;
+      }
     };
   }, []);
 
@@ -262,7 +271,7 @@ export const useVideoPipeline = () => {
         }))
         .filter((scene) => {
           return !pipelineState.allScenes.some(
-            (existing) => existing.imageUrl === scene.imageUrl
+            (existing) => existing.imageUrl === scene.imageUrl,
           );
         });
 
@@ -273,7 +282,7 @@ export const useVideoPipeline = () => {
           progress: updateProgress(
             "Capturing scenes...",
             prev.allScenes.length + newScenes.length,
-            prev.allScenes.length + newScenes.length
+            prev.allScenes.length + newScenes.length,
           ),
         }));
       }
@@ -292,7 +301,7 @@ export const useVideoPipeline = () => {
         progress: updateProgress(
           "Capture complete, starting captions...",
           sceneEntries.length,
-          sceneEntries.length
+          sceneEntries.length,
         ),
       }));
 
@@ -332,7 +341,7 @@ export const useVideoPipeline = () => {
 
         const { result } = await florence2Service.current.generateCaption(
           scene.imageUrl,
-          "<DETAILED_CAPTION>"
+          "<DETAILED_CAPTION>",
         );
         const caption = result["<DETAILED_CAPTION>"] as string;
 
@@ -394,7 +403,7 @@ export const useVideoPipeline = () => {
               progress: updateProgress(
                 "Generating audio...",
                 i + 1,
-                scenesToProcess.length
+                scenesToProcess.length,
               ),
             }));
           } catch (sceneError) {
@@ -403,7 +412,7 @@ export const useVideoPipeline = () => {
               progress: updateProgress(
                 "Generating audio...",
                 i + 1,
-                scenesToProcess.length
+                scenesToProcess.length,
               ),
             }));
           }
@@ -421,7 +430,7 @@ export const useVideoPipeline = () => {
         progress: updateProgress("Complete!", prev.allScenes.length, prev.allScenes.length),
       }));
     },
-    [pipelineState.allScenes, pipelineState.modelsLoaded.kokoro]
+    [pipelineState.allScenes, pipelineState.modelsLoaded.kokoro],
   );
 
   // Auto-advance when video ends and no new scenes are being captured
@@ -442,7 +451,7 @@ export const useVideoPipeline = () => {
               progress: updateProgress(
                 "Video complete, starting captions...",
                 sceneEntries.length,
-                sceneEntries.length
+                sceneEntries.length,
               ),
             }));
 
@@ -483,23 +492,23 @@ export const useVideoPipeline = () => {
 
   const resetPipeline = useCallback(() => {
     // Clean up any audio blob URLs from processed scenes
-    pipelineState.allScenes.forEach(scene => {
-      if (scene.audioUrl && scene.audioUrl.startsWith('blob:')) {
+    pipelineState.allScenes.forEach((scene) => {
+      if (scene.audioUrl && scene.audioUrl.startsWith("blob:")) {
         URL.revokeObjectURL(scene.audioUrl);
       }
     });
-    
+
     processingStage.current = "idle";
     setIsProcessing(false);
-    
+
     // Reset pipeline state but preserve model loading states
-    setPipelineState(prev => ({
+    setPipelineState((prev) => ({
       ...INITIAL_PIPELINE_STATE,
       // Preserve model loading states and progress
       modelsLoaded: prev.modelsLoaded,
       modelProgress: prev.modelProgress,
     }));
-    
+
     videoRef.current?.pause();
     clearAllCaptures();
   }, [videoRef, clearAllCaptures, pipelineState.allScenes]);
@@ -508,15 +517,13 @@ export const useVideoPipeline = () => {
     const sortedScenes = pipelineState.allScenes
       .filter((scene) => scene.caption)
       .sort((a, b) => a.timestamp - b.timestamp);
-    
+
     const srtContent = sortedScenes
       .map((scene, index) => {
         const start = formatSRTTime(scene.timestamp);
         // Calculate end time: either 3 seconds later or until next scene
         const nextScene = sortedScenes[index + 1];
-        const duration = nextScene 
-          ? Math.min(3, nextScene.timestamp - scene.timestamp)
-          : 3;
+        const duration = nextScene ? Math.min(3, nextScene.timestamp - scene.timestamp) : 3;
         const end = formatSRTTime(scene.timestamp + duration);
         return `${index + 1}\n${start} --> ${end}\n${scene.caption}\n`;
       })
@@ -541,7 +548,7 @@ export const useVideoPipeline = () => {
         captions: "captions.srt",
         ttsAudio: "tts-audio.wav",
         scenes: completedScenes.map(
-          (_, index) => `scenes/scene-${String(index + 1).padStart(3, "0")}.jpg`
+          (_, index) => `scenes/scene-${String(index + 1).padStart(3, "0")}.jpg`,
         ),
       },
       summary: `Video with ${completedScenes.length} processed scenes`,

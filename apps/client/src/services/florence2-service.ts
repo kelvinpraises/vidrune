@@ -31,14 +31,32 @@ export class Florence2Service {
   constructor() {
     console.log("[Florence2 Service] Constructor called");
     this.initWorker();
+    console.log("[Florence2 Service] Worker created:", this.worker ? 'SUCCESS' : 'FAILED');
     this.startListeningForAutoInit();
   }
 
   private initWorker() {
-    this.worker = new Worker(
-      new URL('../workers/florence2-worker.ts', import.meta.url),
-      { type: 'module' }
-    );
+    try {
+      this.worker = new Worker(
+        new URL('../workers/florence2-worker.ts', import.meta.url),
+        { type: 'module' }
+      );
+
+      // Add error handler to catch worker errors
+      this.worker.addEventListener('error', (error) => {
+        console.error('[Florence2 Service] Worker error:', error);
+        console.error('[Florence2 Service] Error message:', error.message);
+        console.error('[Florence2 Service] Error filename:', error.filename);
+        console.error('[Florence2 Service] Error lineno:', error.lineno);
+      });
+
+      this.worker.addEventListener('messageerror', (error) => {
+        console.error('[Florence2 Service] Worker message error:', error);
+      });
+    } catch (error) {
+      console.error('[Florence2 Service] Failed to create worker:', error);
+      throw error;
+    }
   }
 
   private startListeningForAutoInit() {
