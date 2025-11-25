@@ -1,12 +1,11 @@
-import { Link } from "@tanstack/react-router";
-import { motion } from "framer-motion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/atoms/tabs";
+import { motion } from "framer-motion";
 
+import { Skeleton } from "@/components/atoms/skeleton";
+import { AppHeader } from "@/components/molecules/app-header";
 import IndexExplorerCards from "@/components/organisms/index-explorer-cards";
 import { UserIndexedVideos } from "@/components/organisms/user-indexed-videos";
-import { ThemeSwitcher } from "@/components/molecules/theme-switcher";
 import { useMetadata } from "@/hooks/use-metadata";
-import { Skeleton } from "@/components/atoms/skeleton";
 
 function ExploreComponent() {
   const { metadata, isLoading, error } = useMetadata();
@@ -14,44 +13,10 @@ function ExploreComponent() {
   return (
     <div className="flex flex-col w-full h-full">
       {/* Header */}
-      <header className="flex items-center p-4 gap-4">
-        <img
-          alt="vidrune logo"
-          src="/logo-light.png"
-          width={40}
-          height={40}
-          className="relative z-10 dark:hidden"
-        />
-        <img
-          alt="vidrune logo"
-          src="/logo-dark.png"
-          width={40}
-          height={40}
-          className="relative z-10 hidden dark:block"
-        />
-
-        <nav className="flex items-center space-x-4 lg:space-x-6">
-          <Link
-            to="/explore"
-            className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary"
-          >
-            Explore
-          </Link>
-        </nav>
-
-        <div className="ml-auto flex items-center gap-4">
-          <ThemeSwitcher />
-          <Link
-            to="/console"
-            className="bg-[#33CB82] hover:bg-[#33CB82]/80 w-[18ch] flex items-center justify-center font-semibold px-6 rounded-[0] py-4 transition-colors duration-200 whitespace-nowrap text-black"
-          >
-            Index a Video
-          </Link>
-        </div>
-      </header>
+      <AppHeader currentPage="datasets" showConnectWallet />
 
       {/* Main Content */}
-      <div className="relative flex flex-col items-center px-4 gap-4">
+      <div className="relative flex flex-col items-center px-4 gap-4 mt-20">
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
