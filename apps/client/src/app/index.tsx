@@ -8,7 +8,6 @@ import { PlaceholdersAndVanishInput } from "@/components/atoms/query-input";
 import { Skeleton } from "@/components/atoms/skeleton";
 import { Tabs, TabsContent } from "@/components/atoms/tabs";
 import { AppHeader } from "@/components/molecules/app-header";
-import { ThemeSwitcher } from "@/components/molecules/theme-switcher";
 import IndexExplorerCards from "@/components/organisms/index-explorer-cards";
 import { PredictionMarketCard } from "@/components/organisms/prediction-market-card";
 import { usePredictionMarkets } from "@/hooks/use-prediction-markets";
