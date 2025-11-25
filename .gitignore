@@ -6,8 +6,6 @@ Thumbs.db
 **/.claude
 **/CLAUDE.md
 **/.kiro
-**/.dfx
-.env.**
 
 # Build outputs
 **/dist/
