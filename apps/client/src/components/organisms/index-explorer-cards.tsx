@@ -3,10 +3,8 @@ import { Grid2X2, List, Play, Search, X } from "lucide-react";
 import React, { useEffect, useId, useRef, useState } from "react";
 
 import { useOutsideClick } from "@/hooks/use-outside-click";
-// import { MetadataTable } from "../../db/config";
-// import { icStorage } from "@/services/ic-storage";
+import { ConvictionModal } from "@/components/organisms/conviction-modal";
 
-// Temporary MetadataTable interface for compilation
 interface MetadataTable {
   id: string;
   title: string;
@@ -15,18 +13,13 @@ interface MetadataTable {
   cover: string;
   uploadedBy: string;
   createAt: Date | string;
+  videoUrl?: string; // Blob URL for the video
   scenes?: Array<{
     description: string;
     keywords: string[];
   }>;
   capturedimgs?: string[];
 }
-
-// Helper to get IC storage URL - temporarily disabled
-const getICStorageUrl = (_cid: string): string => {
-  // return icStorage.getVideoUrl(`/videos/${cid}`);
-  return "/placeholder-image.jpg"; // Temporary placeholder
-};
 
 interface IndexExplorerCardsProps {
   metadata: MetadataTable[];
@@ -42,6 +35,7 @@ const IndexExplorerCards = ({
   const [search, setSearch] = useState("");
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
   const [selectedimgIndex, setSelectedimgIndex] = useState<number | null>(null);
+  const [convictionVideo, setConvictionVideo] = useState<{ id: string; title: string } | null>(null);
   const id = useId();
   const ref = useRef<HTMLDivElement>(null);
 
@@ -190,7 +184,7 @@ const IndexExplorerCards = ({
                 {isPlayingVideo ? (
                   <div className="relative w-full aspect-video bg-black">
                     <video
-                      src={getICStorageUrl(active.id)}
+                      src={active.videoUrl || active.cover}
                       controls
                       autoPlay
                       className="absolute inset-0 w-full h-full sm:rounded-tr-lg sm:rounded-tl-lg object-contain"
@@ -201,7 +195,7 @@ const IndexExplorerCards = ({
                     <img
                       width={500}
                       height={300}
-                      src={getICStorageUrl(active.cover)}
+                      src={active.cover}
                       alt={active.title}
                       className="w-full h-full sm:rounded-tr-lg sm:rounded-tl-lg object-contain"
                     />
@@ -239,10 +233,17 @@ const IndexExplorerCards = ({
                   </div>
 
                   <button
-                    onClick={handlePlayVideo}
-                    className="px-4 py-3 text-sm rounded-full font-mono font-bold bg-green-500 text-white"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // Save which video to convict
+                      setConvictionVideo({ id: active.id, title: active.title });
+                      // Close the video modal
+                      setActive(null);
+                      setIsPlayingVideo(false);
+                    }}
+                    className="px-4 py-3 text-sm rounded-full font-mono font-bold bg-red-500 hover:bg-red-600 text-white transition-colors"
                   >
-                    Play
+                    Convict
                   </button>
                 </div>
                 <div className="flex-1 overflow-y-auto px-4">
@@ -288,8 +289,8 @@ const IndexExplorerCards = ({
                                     src={
                                       active.capturedimgs &&
                                       idx < active.capturedimgs.length
-                                        ? getICStorageUrl(active.capturedimgs[idx])
-                                        : getICStorageUrl(active.cover)
+                                        ? active.capturedimgs[idx]
+                                        : active.cover
                                     }
                                     alt={`Scene ${idx + 1}`}
                                     className="h-20 w-32 rounded-md object-cover border border-gray-200 dark:border-gray-700"
@@ -369,8 +370,8 @@ const IndexExplorerCards = ({
                   src={
                     active.capturedimgs &&
                     selectedimgIndex < active.capturedimgs.length
-                      ? getICStorageUrl(active.capturedimgs[selectedimgIndex])
-                      : getICStorageUrl(active.cover)
+                      ? active.capturedimgs[selectedimgIndex]
+                      : active.cover
                   }
                   alt={
                     selectedimgIndex !== null
@@ -398,6 +399,20 @@ const IndexExplorerCards = ({
         )}
       </AnimatePresence>
 
+      {/* Conviction Modal - rendered outside video modal */}
+      {convictionVideo && (
+        <ConvictionModal
+          videoId={convictionVideo.id}
+          videoTitle={convictionVideo.title}
+          open={true}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) {
+              setConvictionVideo(null);
+            }
+          }}
+        />
+      )}
+
       <ul
         className={`grid ${
           layout === "grid" ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1"
@@ -419,7 +434,7 @@ const IndexExplorerCards = ({
               <img
                 width={layout === "grid" ? 400 : 160}
                 height={layout === "grid" ? 240 : 160}
-                src={getICStorageUrl(item.cover)}
+                src={item.cover}
                 alt={item.title}
                 className={`${
                   layout === "grid" ? "h-60 w-full" : "h-40 w-40"
