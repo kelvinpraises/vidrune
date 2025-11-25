@@ -63,20 +63,11 @@ export function PlaceholdersAndVanishInput({
       let i = 4 * t * 800;
       for (let n = 0; n < 800; n++) {
         let e = i + 4 * n;
-        if (
-          pixelData[e] !== 0 &&
-          pixelData[e + 1] !== 0 &&
-          pixelData[e + 2] !== 0
-        ) {
+        if (pixelData[e] !== 0 && pixelData[e + 1] !== 0 && pixelData[e + 2] !== 0) {
           newData.push({
             x: n,
             y: t,
-            color: [
-              pixelData[e],
-              pixelData[e + 1],
-              pixelData[e + 2],
-              pixelData[e + 3],
-            ],
+            color: [pixelData[e], pixelData[e + 1], pixelData[e + 2], pixelData[e + 3]],
           });
         }
       }
@@ -153,7 +144,7 @@ export function PlaceholdersAndVanishInput({
     if (value && inputRef.current) {
       const maxX = newDataRef.current.reduce(
         (prev, current) => (current.x > prev ? current.x : prev),
-        0
+        0,
       );
       animate(maxX);
     }
@@ -192,7 +183,7 @@ export function PlaceholdersAndVanishInput({
             }}
             className={cn(
               "absolute inset-0 rounded-lg z-[1] opacity-60 group-hover:opacity-100 blur-xl transition duration-500 will-change-transform",
-              "bg-[radial-gradient(circle_farthest-side_at_0_100%,#00ccb1,transparent),radial-gradient(circle_farthest-side_at_100%_0,#7b61ff,transparent),radial-gradient(circle_farthest-side_at_100%_100%,#ffc414,transparent),radial-gradient(circle_farthest-side_at_0_0,#1ca0fb,#141316)]"
+              "bg-[radial-gradient(circle_farthest-side_at_0_100%,#00ccb1,transparent),radial-gradient(circle_farthest-side_at_100%_0,#7b61ff,transparent),radial-gradient(circle_farthest-side_at_100%_100%,#ffc414,transparent),radial-gradient(circle_farthest-side_at_0_0,#1ca0fb,#141316)]",
             )}
           />
           <motion.div
@@ -209,7 +200,7 @@ export function PlaceholdersAndVanishInput({
             }}
             className={cn(
               "absolute inset-0 rounded-[0.6rem] z-[1] will-change-transform",
-              "bg-[radial-gradient(circle_farthest-side_at_0_100%,#00ccb1,transparent),radial-gradient(circle_farthest-side_at_100%_0,#7b61ff,transparent),radial-gradient(circle_farthest-side_at_100%_100%,#ffc414,transparent),radial-gradient(circle_farthest-side_at_0_0,#1ca0fb,#141316)]"
+              "bg-[radial-gradient(circle_farthest-side_at_0_100%,#00ccb1,transparent),radial-gradient(circle_farthest-side_at_100%_0,#7b61ff,transparent),radial-gradient(circle_farthest-side_at_100%_100%,#ffc414,transparent),radial-gradient(circle_farthest-side_at_0_0,#1ca0fb,#141316)]",
             )}
           />
         </>
@@ -217,14 +208,15 @@ export function PlaceholdersAndVanishInput({
       <form
         className={cn(
           "relative z-10 w-full mx-auto bg-white dark:bg-zinc-800 p-6 rounded-lg overflow-hidden shadow-[0px_2px_3px_-1px_rgba(0,0,0,0.1),_0px_1px_0px_0px_rgba(25,28,33,0.02),_0px_0px_0px_1px_rgba(25,28,33,0.08)] transition duration-200",
-          value && "bg-gray-50"
+          value && "bg-gray-50",
+          isFocused && "rounded-[0.4rem]",
         )}
         onSubmit={handleSubmit}
       >
         <canvas
           className={cn(
             "absolute pointer-events-none text-base transform scale-50 top-[30%] left-5 origin-top-left filter invert dark:invert-0 pr-20",
-            !animating ? "opacity-0" : "opacity-100"
+            !animating ? "opacity-0" : "opacity-100",
           )}
           ref={canvasRef}
         />
@@ -243,7 +235,7 @@ export function PlaceholdersAndVanishInput({
           type="text"
           className={cn(
             "w-[calc(100%-6.5rem)] relative text-sm sm:text-base z-50 border-none dark:text-white bg-transparent text-black h-full focus:outline-none focus:ring-0 pl-1",
-            animating && "text-transparent dark:text-transparent"
+            animating && "text-transparent dark:text-transparent",
           )}
         />
 

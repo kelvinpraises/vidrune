@@ -73,6 +73,9 @@ export const isDevelopment = process.env.NODE_ENV === "development";
 export function isValidUrl(url: string | null) {
   if (!url) return false;
 
+  // Check for blob URLs which are valid but special
+  if (url.startsWith('blob:')) return url;
+
   try {
     new URL(url);
     return url;

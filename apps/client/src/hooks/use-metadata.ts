@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
-// import { MetadataTable } from "../db/config";
+import { loadVideoPackageFromWalrus } from "@/services/walrus-video-loader";
 
-// Temporary MetadataTable interface for compilation
 interface MetadataTable {
   id: string;
   title: string;
@@ -10,6 +9,7 @@ interface MetadataTable {
   cover: string;
   uploadedBy: string;
   createAt: Date | string;
+  videoUrl?: string; // Blob URL for the video
   scenes?: Array<{
     description: string;
     keywords: string[];
@@ -19,52 +19,30 @@ interface MetadataTable {
 
 export function useMetadata() {
   const [metadata, setMetadata] = useState<MetadataTable[]>([]);
-  const [isLoading, setIsLoading] = useState(false); // Set to false to avoid loading state
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchMetadata = async () => {
     setIsLoading(true);
     try {
-      // Temporarily return mock data instead of API call
-      const mockData: MetadataTable[] = [
-        {
-          id: "video_1",
-          title: "Sample Video 1",
-          description: "A sample video for testing",
-          summary: "This is a sample video used for testing the interface",
-          cover: "/placeholder-image.jpg",
-          uploadedBy: "user123",
-          createAt: new Date(),
-          scenes: [
-            {
-              description: "Opening scene",
-              keywords: ["intro", "start", "beginning"]
-            }
-          ],
-          capturedimgs: ["/placeholder-image.jpg"]
-        },
-        {
-          id: "video_2",
-          title: "Sample Video 2",
-          description: "Another sample video",
-          summary: "This is another sample video for testing",
-          cover: "/placeholder-image.jpg",
-          uploadedBy: "user456",
-          createAt: new Date(),
-          scenes: [
-            {
-              description: "Main content",
-              keywords: ["content", "main", "video"]
-            }
-          ],
-          capturedimgs: ["/placeholder-image.jpg"]
-        }
-      ];
-      
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      setMetadata(mockData);
+      // Load video package from Walrus (currently loading from local zip)
+      const videoPackage = await loadVideoPackageFromWalrus('dummy-blob-id');
+
+      // Transform to MetadataTable format
+      const transformedData: MetadataTable = {
+        id: videoPackage.manifest.id,
+        title: videoPackage.manifest.title,
+        description: videoPackage.manifest.description,
+        summary: videoPackage.manifest.summary,
+        cover: videoPackage.sceneUrls[0] || "", // Use first scene as cover
+        uploadedBy: videoPackage.manifest.uploadedBy,
+        createAt: new Date(videoPackage.manifest.uploadTime),
+        videoUrl: videoPackage.videoUrl, // Blob URL for the video
+        scenes: videoPackage.manifest.scenes,
+        capturedimgs: videoPackage.sceneUrls, // All scene URLs
+      };
+
+      setMetadata([transformedData]);
       setError(null);
     } catch (err) {
       console.error("Error fetching metadata:", err);

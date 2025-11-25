@@ -545,11 +545,13 @@ export const useVideoPipeline = () => {
       uploadTime: Date.now(),
       assetBaseUrl: "",
       assets: {
-        video: "",
+        video: "video.mp4",
         captions: "captions.srt",
-        ttsAudio: "tts-audio.wav",
         scenes: completedScenes.map(
-          (_, index) => `scenes/scene-${String(index + 1).padStart(3, "0")}.jpg`,
+          (_, index) => `scenes/scene-${String(index + 1).padStart(3, "0")}.png`,
+        ),
+        audio: completedScenes.map(
+          (_, index) => `audio/audio-${String(index + 1).padStart(3, "0")}.wav`,
         ),
       },
       summary: `Video with ${completedScenes.length} processed scenes`,

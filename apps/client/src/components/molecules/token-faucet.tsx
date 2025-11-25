@@ -24,7 +24,6 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/atoms/drawer";
-// import { icCanisterService } from "@/services/ic-canister";
 
 interface TokenFaucetProps {
   children: React.ReactNode;
@@ -32,7 +31,7 @@ interface TokenFaucetProps {
   onBalanceUpdate: () => void;
 }
 
-export function TokenFaucet({ children, currentBalance, onBalanceUpdate: _onBalanceUpdate }: TokenFaucetProps) {
+export function TokenFaucet({ children, currentBalance, onBalanceUpdate }: TokenFaucetProps) {
   const [open, setOpen] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
   const isDesktop = useMediaQuery("(min-width: 768px)");
@@ -40,21 +39,19 @@ export function TokenFaucet({ children, currentBalance, onBalanceUpdate: _onBala
   const handleClaimTokens = async () => {
     setIsLoading(true);
     try {
-      // const result = await icCanisterService.getTestnetTokens();
-      
-      // if (result.success) {
-      //   toast.success("Tokens claimed successfully!", {
-      //     description: result.message,
-      //   });
-      //   onBalanceUpdate(); // Refresh balance
-      //   setOpen(false);
-      // } else {
-      //   toast.error("Failed to claim tokens", {
-      //     description: result.message,
-      //   });
-      // }
+      // Mock faucet - for demo purposes
+      // TODO: Integrate with actual ROHR token contract on SUI
+      await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate network delay
+
+      toast.success("Tokens claimed successfully!", {
+        description: "100 ROHR tokens added to your wallet",
+      });
+
+      // Refresh balance after claiming
+      await onBalanceUpdate();
+      setOpen(false);
     } catch (error) {
-      toast.error("Network error occurred", {
+      toast.error("Failed to claim tokens", {
         description: "Please try again later",
       });
     } finally {
@@ -66,30 +63,32 @@ export function TokenFaucet({ children, currentBalance, onBalanceUpdate: _onBala
     <div className={cn("grid items-start gap-6", className)}>
       <div className="grid gap-3">
         <div className="text-center space-y-2">
-          <div className="text-2xl font-bold text-green-600">{Math.round(currentBalance)} VI</div>
+          <div className="text-2xl font-bold text-green-600">
+            {currentBalance.toFixed(1)} ROHR
+          </div>
           <div className="text-sm text-muted-foreground">Current Balance</div>
         </div>
       </div>
-      
+
       <div className="grid gap-3">
         <div className="text-center space-y-2">
           <div className="text-lg font-semibold">Get Free Testnet Tokens</div>
           <div className="text-sm text-muted-foreground">
-            Claim 100 VI tokens to start indexing videos
+            Claim 100 ROHR tokens to start indexing videos
           </div>
         </div>
       </div>
 
-      <Button 
-        onClick={handleClaimTokens} 
+      <Button
+        onClick={handleClaimTokens}
         disabled={isLoading}
         className="w-full"
       >
-        {isLoading ? "Claiming..." : "Claim 100 VI Tokens"}
+        {isLoading ? "Claiming..." : "Claim 100 ROHR Tokens"}
       </Button>
 
       <div className="text-xs text-muted-foreground text-center">
-        Each video upload costs 2 VI tokens
+        Each video upload costs 2 ROHR tokens
       </div>
     </div>
   );
@@ -102,9 +101,9 @@ export function TokenFaucet({ children, currentBalance, onBalanceUpdate: _onBala
         </DialogTrigger>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Token Faucet</DialogTitle>
+            <DialogTitle>ROHR Token Faucet</DialogTitle>
             <DialogDescription>
-              Get free testnet VI tokens to start indexing videos
+              Get free testnet ROHR tokens to start indexing videos
             </DialogDescription>
           </DialogHeader>
           <FaucetContent />
@@ -120,9 +119,9 @@ export function TokenFaucet({ children, currentBalance, onBalanceUpdate: _onBala
       </DrawerTrigger>
       <DrawerContent>
         <DrawerHeader className="text-left">
-          <DrawerTitle>Token Faucet</DrawerTitle>
+          <DrawerTitle>ROHR Token Faucet</DrawerTitle>
           <DrawerDescription>
-            Get free testnet VI tokens to start indexing videos
+            Get free testnet ROHR tokens to start indexing videos
           </DrawerDescription>
         </DrawerHeader>
         <FaucetContent className="px-4" />

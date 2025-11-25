@@ -14,6 +14,8 @@ import {
 import type { GlobeMethods } from "react-globe.gl";
 import { toast } from "sonner";
 
+import { useZkLoginAccount } from "@/providers/zklogin-provider";
+
 import {
   Accordion,
   AccordionContent,
@@ -43,6 +45,9 @@ function ConsoleComponent() {
   const [loaded, setLoaded] = useState(false);
   const [showComponent, setShowComponent] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
+
+  // zkLogin authentication
+  const zkLoginAccount = useZkLoginAccount();
 
   // TODO: Replace with Internet Computer authentication
   const [icAuth] = useState({ isConnected: true, principal: "mock-principal" });
@@ -96,7 +101,7 @@ function ConsoleComponent() {
         color: POINT_COLORS[Math.floor(Math.random() * POINT_COLORS.length)],
         crystal: CRYSTAL_TYPES[Math.floor(Math.random() * CRYSTAL_TYPES.length)],
       })),
-    []
+    [],
   );
 
   useEffect(() => {
@@ -155,7 +160,7 @@ function ConsoleComponent() {
         toast.error("Please select a valid video file");
       }
     },
-    [videoMetadata.title]
+    [videoMetadata.title],
   );
 
   // Unused - keeping for potential future use
@@ -194,25 +199,139 @@ function ConsoleComponent() {
     toast.success("SRT file downloaded!");
   }, [generateSRTFile, selectedVideo]);
 
-  const handleSaveMetadata = useCallback(() => {
-    const metadata = generateMetadata();
-    const blob = new Blob([JSON.stringify(metadata, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${selectedVideo?.name || "video"}_metadata.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast.success("Metadata saved!");
-  }, [generateMetadata, selectedVideo]);
+  // Unused for now - will be used when we add metadata export feature
+  // const handleSaveMetadata = useCallback(() => {
+  //   const metadata = generateMetadata();
+  //   const blob = new Blob([JSON.stringify(metadata, null, 2)], {
+  //     type: "application/json",
+  //   });
+  //   const url = URL.createObjectURL(blob);
+  //   const a = document.createElement("a");
+  //   a.href = url;
+  //   a.download = `${selectedVideo?.name || "video"}_metadata.json`;
+  //   document.body.appendChild(a);
+  //   a.click();
+  //   document.body.removeChild(a);
+  //   URL.revokeObjectURL(url);
+  //   toast.success("Metadata saved!");
+  // }, [generateMetadata, selectedVideo]);
+
+  const handleIndexVideo = useCallback(async () => {
+    if (!selectedVideo) {
+      toast.error("No video selected");
+      return;
+    }
+
+    if (!videoMetadata.title || !videoMetadata.description) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    const processedScenes = pipelineState.allScenes.filter((s) => s.processed);
+    if (processedScenes.length === 0) {
+      toast.error("Please process the video first");
+      return;
+    }
+
+    try {
+      toast.info("Creating video index package...");
+
+      // Generate SRT content
+      const srtUrl = generateSRTFile();
+      const srtResponse = await fetch(srtUrl);
+      const srtContent = await srtResponse.text();
+      URL.revokeObjectURL(srtUrl);
+
+      // Generate metadata
+      const metadata = generateMetadata();
+      const enrichedMetadata = {
+        ...metadata,
+        title: videoMetadata.title,
+        description: videoMetadata.description,
+        uploadedBy: zkLoginAccount?.address || "anonymous",
+        uploadTime: Date.now(),
+      };
+
+      // Merge all audio files
+      const audioScenes = processedScenes.filter((s) => s.audioUrl);
+      if (audioScenes.length === 0) {
+        toast.error("No audio files generated. Please complete the pipeline.");
+        return;
+      }
+
+      // Create ZIP package
+      toast.info("Creating ZIP package...");
+      const { createVideoIndexZip } = await import("@/services/create-zip");
+      const sceneImages = processedScenes
+        .filter((s) => s.imageUrl)
+        .map((scene, index) => ({
+          imageUrl: scene.imageUrl,
+          index,
+        }));
+      const audioFiles = processedScenes
+        .filter((s) => s.audioUrl)
+        .map((scene, index) => ({
+          audioUrl: scene.audioUrl!,
+          index,
+        }));
+      const zipBlob = await createVideoIndexZip(
+        selectedVideo,
+        srtContent,
+        JSON.stringify(enrichedMetadata, null, 2),
+        sceneImages,
+        audioFiles
+      );
+
+      // Check 10 MiB limit
+      if (zipBlob.size > 10 * 1024 * 1024) {
+        toast.error(
+          `ZIP package size (${(zipBlob.size / 1024 / 1024).toFixed(2)} MB) exceeds 10 MB limit. Please use a shorter video.`
+        );
+        return;
+      }
+
+      toast.info(`Uploading ${(zipBlob.size / 1024 / 1024).toFixed(2)} MB ZIP to Walrus...`);
+
+      // Upload to Walrus
+      const walrusStorage = await import("@/services/walrus-storage");
+      // Convert Blob to File for walrus upload
+      const zipFile = new File([zipBlob], "video-index.zip", { type: "application/zip" });
+      const blobId = await walrusStorage.default.uploadFile(zipFile, (progress) => {
+        if (progress % 10 === 0) {
+          toast.info(`Upload progress: ${progress}%`);
+        }
+      });
+
+      if (!blobId) {
+        toast.error("Upload failed. Please try again.");
+        return;
+      }
+
+      toast.success(`Video indexed successfully! Blob ID: ${blobId}`);
+      console.log("Walrus Blob ID:", blobId);
+      console.log("Access URL:", `https://aggregator.walrus-testnet.walrus.space/v1/${blobId}`);
+    } catch (error) {
+      console.error("Index upload error:", error);
+      toast.error(
+        `Upload failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+    }
+  }, [
+    selectedVideo,
+    videoMetadata,
+    pipelineState.allScenes,
+    generateSRTFile,
+    generateMetadata,
+  ]);
 
   const handleVideoProcessing = useCallback(async () => {
     if (!selectedVideo) {
       toast.error("Please select a video file first");
+      return;
+    }
+
+    if (!videoMetadata.title || !videoMetadata.description) {
+      toast.error("Please fill in all required fields (title and description)");
       return;
     }
 
@@ -230,7 +349,7 @@ function ConsoleComponent() {
           videoRef.current.videoHeight > 0
         ) {
           console.log(
-            `Video ready: ${videoRef.current.videoWidth}x${videoRef.current.videoHeight}`
+            `Video ready: ${videoRef.current.videoWidth}x${videoRef.current.videoHeight}`,
           );
           startPipeline();
           toast.success("Video processing started!");
@@ -251,14 +370,14 @@ function ConsoleComponent() {
           videoRef.current.videoHeight > 0
         ) {
           console.log(
-            `Video data ready: ${videoRef.current.videoWidth}x${videoRef.current.videoHeight}`
+            `Video data ready: ${videoRef.current.videoWidth}x${videoRef.current.videoHeight}`,
           );
           startPipeline();
           toast.success("Video processing started!");
         }
       };
     }
-  }, [selectedVideo, videoRef, startPipeline]);
+  }, [selectedVideo, videoMetadata, videoRef, startPipeline]);
 
   const handleStandbyClick = async () => {
     if (!icAuth.isConnected) {
@@ -390,8 +509,8 @@ function ConsoleComponent() {
                     Decentralize each story. Unleash it's insights.
                   </p>
                   <p className="text-sm md:text-base font-medium leading-[17px] text-[#484E62] text-center">
-                    Join the network, earn VI tokens, and{" "}
-                    <Link to={"/explore"} className="text-[#138FA8]">
+                    Join the network, earn ROHR tokens, and{" "}
+                    <Link to={"/datasets"} className="text-[#138FA8]">
                       explore
                     </Link>{" "}
                     indexed videos or add your own.
@@ -488,7 +607,7 @@ function ConsoleComponent() {
                             <p className="text-3xl md:text-4xl font-outfit font-bold">
                               {pipelineState.currentStage === "generating-audio"
                                 ? pipelineState.allScenes.filter(
-                                    (s) => s.caption && !s.audioUrl
+                                    (s) => s.caption && !s.audioUrl,
                                   ).length
                                 : 0}
                             </p>
@@ -504,7 +623,7 @@ function ConsoleComponent() {
                               <div className="group relative">
                                 <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
                                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-popover text-popover-foreground text-xs rounded-md shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
-                                  Points earned from successful video uploads (2 VI tokens
+                                  Points earned from successful video uploads (1 ROHR token
                                   each)
                                 </div>
                               </div>
@@ -583,7 +702,7 @@ function ConsoleComponent() {
                                                     .progress || 0) /
                                                     pipelineState.modelProgress.florence2
                                                       .total) *
-                                                    100
+                                                    100,
                                                 )}
                                                 %
                                               </span>
@@ -669,7 +788,7 @@ function ConsoleComponent() {
                                                     .progress || 0) /
                                                     pipelineState.modelProgress.kokoro
                                                       .total) *
-                                                    100
+                                                    100,
                                                 )}
                                                 %
                                               </span>
@@ -705,7 +824,7 @@ function ConsoleComponent() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <h1 className="font-outfit font-semibold text-lg md:text-xl">
-                            Video Processing
+                            Video Indexer
                           </h1>
                           {isTestMode && (
                             <div className="flex items-center gap-2 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 rounded-md text-xs font-medium">
@@ -716,10 +835,17 @@ function ConsoleComponent() {
                         {!isTestMode && (
                           <div className="text-sm text-muted-foreground">
                             💡 Add{" "}
-                            <code className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
-                              ?test
-                            </code>{" "}
-                            to URL for test mode
+                            <Link
+                              to="/console"
+                              search={{ test: true }}
+                              className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer inline-block font-mono text-sm group relative"
+                            >
+                              ?test=true
+                              <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-popover text-popover-foreground text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                                Click to enable test mode
+                              </span>
+                            </Link>{" "}
+                            to URL for detailed mode
                           </div>
                         )}
                       </div>
@@ -800,8 +926,9 @@ function ConsoleComponent() {
                                     </div>
 
                                     <div className="space-y-2">
-                                      <label className="text-sm font-outfit font-medium text-foreground">
+                                      <label className="text-sm font-outfit font-medium text-foreground flex items-center gap-1">
                                         Description
+                                        <span className="text-red-500">*</span>
                                       </label>
                                       <textarea
                                         value={videoMetadata.description}
@@ -811,8 +938,9 @@ function ConsoleComponent() {
                                             description: e.target.value,
                                           }))
                                         }
-                                        placeholder="Provide a detailed description of the video content..."
+                                        placeholder="Provide a detailed description of the video content (required)..."
                                         rows={4}
+                                        required
                                         className="w-full px-4 py-3 border-2 border-border/50 rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:border-solid transition-all resize-none"
                                       />
                                     </div>
@@ -846,25 +974,23 @@ function ConsoleComponent() {
 
                             {/* Processing Controls */}
                             <div className="space-y-4">
-                              <div className="flex flex-wrap gap-3">
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                 <button
                                   onClick={handleVideoProcessing}
                                   disabled={!selectedVideo || isProcessing}
-                                  className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-all flex items-center gap-2 shadow-md hover:shadow-lg"
+                                  className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
                                 >
                                   <Play className="h-4 w-4" />
-                                  {isProcessing
-                                    ? "Processing..."
-                                    : "Start Video Processing"}
+                                  {isProcessing ? "Indexing..." : "Start"}
                                 </button>
 
                                 <button
                                   onClick={handleStopProcessing}
                                   disabled={!isProcessing}
-                                  className="px-6 py-3 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-all flex items-center gap-2 shadow-md hover:shadow-lg"
+                                  className="px-6 py-3 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
                                 >
                                   <Pause className="h-4 w-4" />
-                                  Stop Processing
+                                  Stop
                                 </button>
 
                                 <button
@@ -883,7 +1009,7 @@ function ConsoleComponent() {
                                     setVideoMetadata({ title: "", description: "" });
                                     resetPipeline();
                                   }}
-                                  className="px-6 py-3 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg font-medium transition-all flex items-center gap-2 shadow-md hover:shadow-lg"
+                                  className="px-6 py-3 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg font-medium transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
                                 >
                                   <RotateCcw className="h-4 w-4" />
                                   Reset
@@ -929,43 +1055,122 @@ function ConsoleComponent() {
                               </div>
                             )}
 
-                            {/* Download Options */}
-                            {pipelineState.allScenes.filter((s) => s.processed).length >
-                              0 && (
+                            {/* Index Video - Upload to Walrus */}
+                            {pipelineState.allScenes.length > 0 && (
                               <div className="space-y-4 border-t pt-6">
-                                <div className="flex items-center gap-2">
-                                  <h3 className="font-outfit font-semibold text-base text-[#484E62] dark:text-[#B7BDD5]">
-                                    Download Results
-                                  </h3>
-                                  <div className="group relative">
-                                    <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
-                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-popover text-popover-foreground text-sm rounded-md shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
-                                      Download SRT captions and metadata JSON files
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="flex flex-wrap gap-3">
-                                  <button
-                                    onClick={handleDownloadSRT}
-                                    className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all flex items-center gap-2 shadow-md hover:shadow-lg"
+                                <button
+                                  onClick={handleIndexVideo}
+                                  disabled={
+                                    !videoMetadata.title ||
+                                    !videoMetadata.description ||
+                                    isProcessing ||
+                                    pipelineState.currentStage !== "complete" ||
+                                    pipelineState.allScenes.some(
+                                      (s) => !s.caption || !s.audioUrl,
+                                    )
+                                  }
+                                  className="w-full px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
+                                >
+                                  <svg
+                                    className="h-5 w-5"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
                                   >
-                                    <Download className="h-4 w-4" />
-                                    Download SRT
-                                  </button>
-                                  <button
-                                    onClick={handleSaveMetadata}
-                                    className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-all flex items-center gap-2 shadow-md hover:shadow-lg"
-                                  >
-                                    <Download className="h-4 w-4" />
-                                    Save Metadata
-                                  </button>
-                                </div>
-                                <p className="text-sm text-muted-foreground">
-                                  {
-                                    pipelineState.allScenes.filter((s) => s.processed)
-                                      .length
-                                  }{" "}
-                                  scenes processed and ready for download
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                                    />
+                                  </svg>
+                                  Index Video to Walrus
+                                </button>
+
+                                {/* Test Download Button */}
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      toast.info("Creating test ZIP package...");
+
+                                      // Generate SRT
+                                      const srtUrl = generateSRTFile();
+                                      const srtResponse = await fetch(srtUrl);
+                                      const srtContent = await srtResponse.text();
+                                      URL.revokeObjectURL(srtUrl);
+
+                                      // Generate metadata
+                                      const metadata = generateMetadata();
+                                      const enrichedMetadata = {
+                                        ...metadata,
+                                        title: videoMetadata.title,
+                                        description: videoMetadata.description,
+                                        uploadedBy: zkLoginAccount?.address || "anonymous",
+                                        uploadTime: Date.now(),
+                                      };
+
+                                      // Create ZIP with scenes and audio
+                                      const { createVideoIndexZip } = await import(
+                                        "@/services/create-zip"
+                                      );
+                                      const sceneImages = pipelineState.allScenes
+                                        .filter((s) => s.imageUrl)
+                                        .map((scene, index) => ({
+                                          imageUrl: scene.imageUrl,
+                                          index,
+                                        }));
+                                      const audioFiles = pipelineState.allScenes
+                                        .filter((s) => s.audioUrl)
+                                        .map((scene, index) => ({
+                                          audioUrl: scene.audioUrl!,
+                                          index,
+                                        }));
+
+                                      const zipBlob = await createVideoIndexZip(
+                                        selectedVideo!,
+                                        srtContent,
+                                        JSON.stringify(enrichedMetadata, null, 2),
+                                        sceneImages,
+                                        audioFiles
+                                      );
+
+                                      // Download ZIP
+                                      const url = URL.createObjectURL(zipBlob);
+                                      const link = document.createElement("a");
+                                      link.href = url;
+                                      link.download = `${videoMetadata.title.replace(/[^a-z0-9]/gi, "-")}-index.zip`;
+                                      link.click();
+                                      URL.revokeObjectURL(url);
+
+                                      toast.success(
+                                        `Test ZIP created! Size: ${(zipBlob.size / 1024 / 1024).toFixed(2)} MB`
+                                      );
+                                    } catch (error) {
+                                      console.error("Test ZIP error:", error);
+                                      toast.error(
+                                        `Failed to create test ZIP: ${error instanceof Error ? error.message : "Unknown error"}`
+                                      );
+                                    }
+                                  }}
+                                  disabled={
+                                    !videoMetadata.title ||
+                                    !videoMetadata.description ||
+                                    isProcessing ||
+                                    pipelineState.currentStage !== "complete" ||
+                                    pipelineState.allScenes.some(
+                                      (s) => !s.caption || !s.audioUrl
+                                    )
+                                  }
+                                  className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
+                                >
+                                  <Download className="h-5 w-5" />
+                                  Download Index Zip (no upload)
+                                </button>
+
+                                <p className="text-sm text-muted-foreground text-center">
+                                  {pipelineState.currentStage === "complete"
+                                    ? `${pipelineState.allScenes.length} scenes with captions and audio - ready to index`
+                                    : `Processing: ${pipelineState.allScenes.filter((s) => s.caption).length}/${pipelineState.allScenes.length} captions, ${pipelineState.allScenes.filter((s) => s.audioUrl).length}/${pipelineState.allScenes.length} audio`}
                                 </p>
                               </div>
                             )}
@@ -1016,8 +1221,7 @@ function ConsoleComponent() {
                             </div>
 
                             <p className="text-sm text-blue-600 dark:text-blue-300 mt-1">
-                              Videos will be processed locally without uploading to IC.
-                              Perfect for testing the AI pipeline.
+                              Videos will be processed locally.
                             </p>
 
                             <div className="space-y-4 pt-6">
@@ -1106,7 +1310,7 @@ function ConsoleComponent() {
                                               <span className="text-muted-foreground">
                                                 •{" "}
                                                 {(selectedVideo.size / 1024 / 1024).toFixed(
-                                                  1
+                                                  1,
                                                 )}
                                                 MB
                                               </span>
@@ -1118,13 +1322,13 @@ function ConsoleComponent() {
                                             <div
                                               className={`w-2 h-2 rounded-full ${
                                                 pipelineState.allScenes.filter(
-                                                  (s) => s.processed
+                                                  (s) => s.processed,
                                                 ).length > 0
                                                   ? "bg-green-500"
                                                   : pipelineState.currentStage ===
-                                                    "capturing"
-                                                  ? "bg-yellow-500"
-                                                  : "bg-gray-400"
+                                                      "capturing"
+                                                    ? "bg-yellow-500"
+                                                    : "bg-gray-400"
                                               }`}
                                             />
                                             <span className="font-medium">
@@ -1132,18 +1336,18 @@ function ConsoleComponent() {
                                             </span>
                                             <span className="text-muted-foreground">
                                               {pipelineState.allScenes.filter(
-                                                (s) => s.processed
+                                                (s) => s.processed,
                                               ).length > 0
                                                 ? "✅ Active"
                                                 : pipelineState.currentStage === "capturing"
-                                                ? "⏳ Processing"
-                                                : "⏸️ Idle"}
+                                                  ? "⏳ Processing"
+                                                  : "⏸️ Idle"}
                                             </span>
                                             <span className="text-muted-foreground">
                                               •{" "}
                                               {
                                                 pipelineState.allScenes.filter(
-                                                  (s) => s.processed
+                                                  (s) => s.processed,
                                                 ).length
                                               }{" "}
                                               scenes extracted
@@ -1155,13 +1359,13 @@ function ConsoleComponent() {
                                             <div
                                               className={`w-2 h-2 rounded-full ${
                                                 pipelineState.allScenes.filter(
-                                                  (s) => s.caption
+                                                  (s) => s.caption,
                                                 ).length > 0
                                                   ? "bg-green-500"
                                                   : pipelineState.currentStage ===
-                                                    "captioning"
-                                                  ? "bg-yellow-500"
-                                                  : "bg-gray-400"
+                                                      "captioning"
+                                                    ? "bg-yellow-500"
+                                                    : "bg-gray-400"
                                               }`}
                                             />
                                             <span className="font-medium">
@@ -1169,19 +1373,19 @@ function ConsoleComponent() {
                                             </span>
                                             <span className="text-muted-foreground">
                                               {pipelineState.allScenes.filter(
-                                                (s) => s.caption
+                                                (s) => s.caption,
                                               ).length > 0
                                                 ? "✅ Active"
                                                 : pipelineState.currentStage ===
-                                                  "captioning"
-                                                ? "⏳ Processing"
-                                                : "⏸️ Idle"}
+                                                    "captioning"
+                                                  ? "⏳ Processing"
+                                                  : "⏸️ Idle"}
                                             </span>
                                             <span className="text-muted-foreground">
                                               •{" "}
                                               {
                                                 pipelineState.allScenes.filter(
-                                                  (s) => s.caption
+                                                  (s) => s.caption,
                                                 ).length
                                               }{" "}
                                               captions generated
@@ -1193,31 +1397,31 @@ function ConsoleComponent() {
                                             <div
                                               className={`w-2 h-2 rounded-full ${
                                                 pipelineState.allScenes.filter(
-                                                  (s) => s.audioUrl
+                                                  (s) => s.audioUrl,
                                                 ).length > 0
                                                   ? "bg-green-500"
                                                   : pipelineState.currentStage ===
-                                                    "generating-audio"
-                                                  ? "bg-yellow-500"
-                                                  : "bg-gray-400"
+                                                      "generating-audio"
+                                                    ? "bg-yellow-500"
+                                                    : "bg-gray-400"
                                               }`}
                                             />
                                             <span className="font-medium">Kokoro TTS</span>
                                             <span className="text-muted-foreground">
                                               {pipelineState.allScenes.filter(
-                                                (s) => s.audioUrl
+                                                (s) => s.audioUrl,
                                               ).length > 0
                                                 ? "✅ Active"
                                                 : pipelineState.currentStage ===
-                                                  "generating-audio"
-                                                ? "⏳ Processing"
-                                                : "⏸️ Idle"}
+                                                    "generating-audio"
+                                                  ? "⏳ Processing"
+                                                  : "⏸️ Idle"}
                                             </span>
                                             <span className="text-muted-foreground">
                                               •{" "}
                                               {
                                                 pipelineState.allScenes.filter(
-                                                  (s) => s.audioUrl
+                                                  (s) => s.audioUrl,
                                                 ).length
                                               }{" "}
                                               audio files generated
@@ -1267,7 +1471,7 @@ function ConsoleComponent() {
                                                   ? Math.round(
                                                       (100 -
                                                         pipelineState.progress.percentage) *
-                                                        0.5
+                                                        0.5,
                                                     ) + "s"
                                                   : "N/A"}
                                               </span>
@@ -1306,7 +1510,7 @@ function ConsoleComponent() {
                                                         .progress /
                                                         pipelineState.modelProgress
                                                           .florence2.total) *
-                                                        100
+                                                        100,
                                                     )}
                                                     %
                                                   </span>
@@ -1337,7 +1541,7 @@ function ConsoleComponent() {
                                                         .progress /
                                                         pipelineState.modelProgress.kokoro
                                                           .total) *
-                                                        100
+                                                        100,
                                                     )}
                                                     %
                                                   </span>
@@ -1355,9 +1559,27 @@ function ConsoleComponent() {
                                                 <h4 className="font-medium text-sm">
                                                   Scene Images
                                                 </h4>
-                                                <button className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                                                <button
+                                                  onClick={() => {
+                                                    const scenes =
+                                                      pipelineState.allScenes.filter(
+                                                        (s) => s.processed && s.imageUrl,
+                                                      );
+                                                    scenes.forEach((scene, index) => {
+                                                      const link =
+                                                        document.createElement("a");
+                                                      link.href = scene.imageUrl;
+                                                      link.download = `scene-${index + 1}-${scene.timestamp?.toFixed(1)}s.png`;
+                                                      link.click();
+                                                    });
+                                                    toast.success(
+                                                      `Saving ${scenes.length} scene images...`,
+                                                    );
+                                                  }}
+                                                  className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                                                >
                                                   <Download className="h-3 w-3" />
-                                                  Download All Scenes
+                                                  Save All Scenes
                                                 </button>
                                               </div>
                                               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -1374,7 +1596,7 @@ function ConsoleComponent() {
                                                           onClick={() =>
                                                             handleImageClick(
                                                               scene.imageUrl,
-                                                              index
+                                                              index,
                                                             )
                                                           }
                                                         >
@@ -1383,7 +1605,7 @@ function ConsoleComponent() {
                                                             alt={`Scene ${
                                                               index + 1
                                                             } at ${scene.timestamp?.toFixed(
-                                                              1
+                                                              1,
                                                             )}s`}
                                                             width={120}
                                                             height={80}
@@ -1406,7 +1628,7 @@ function ConsoleComponent() {
                                                             {scene.caption
                                                               ? `"${scene.caption.substring(
                                                                   0,
-                                                                  30
+                                                                  30,
                                                                 )}..."`
                                                               : "Processing..."}
                                                           </div>
@@ -1419,13 +1641,13 @@ function ConsoleComponent() {
                                                             link.download = `scene-${
                                                               index + 1
                                                             }-${scene.timestamp?.toFixed(
-                                                              1
+                                                              1,
                                                             )}s.png`;
                                                             link.click();
                                                           }}
                                                           className="w-full text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-600 py-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
                                                         >
-                                                          Download
+                                                          Save
                                                         </button>
                                                       </div>
                                                     </Card>
@@ -1439,9 +1661,12 @@ function ConsoleComponent() {
                                                 <h4 className="font-medium text-sm">
                                                   Generated Captions
                                                 </h4>
-                                                <button className="text-xs text-green-600 hover:text-green-700 flex items-center gap-1">
+                                                <button
+                                                  onClick={handleDownloadSRT}
+                                                  className="text-xs text-green-600 hover:text-green-700 flex items-center gap-1"
+                                                >
                                                   <Download className="h-3 w-3" />
-                                                  Download SRT
+                                                  Save SRT
                                                 </button>
                                               </div>
                                               <div className="space-y-2 max-h-48 overflow-y-auto">
@@ -1471,9 +1696,44 @@ function ConsoleComponent() {
                                                 <h4 className="font-medium text-sm">
                                                   Generated Audio
                                                 </h4>
-                                                <button className="text-xs text-purple-600 hover:text-purple-700 flex items-center gap-1">
+                                                <button
+                                                  onClick={() => {
+                                                    const audioScenes =
+                                                      pipelineState.allScenes.filter(
+                                                        (s) => s.audioUrl,
+                                                      );
+                                                    audioScenes.forEach(
+                                                      async (scene, index) => {
+                                                        try {
+                                                          const response = await fetch(
+                                                            scene.audioUrl!,
+                                                          );
+                                                          const blob =
+                                                            await response.blob();
+                                                          const url =
+                                                            URL.createObjectURL(blob);
+                                                          const link =
+                                                            document.createElement("a");
+                                                          link.href = url;
+                                                          link.download = `audio-${index + 1}-${scene.timestamp?.toFixed(1)}s.wav`;
+                                                          link.click();
+                                                          URL.revokeObjectURL(url);
+                                                        } catch (error) {
+                                                          console.error(
+                                                            "Failed to download audio:",
+                                                            error,
+                                                          );
+                                                        }
+                                                      },
+                                                    );
+                                                    toast.success(
+                                                      `Saving ${audioScenes.length} audio files...`,
+                                                    );
+                                                  }}
+                                                  className="text-xs text-purple-600 hover:text-purple-700 flex items-center gap-1"
+                                                >
                                                   <Download className="h-3 w-3" />
-                                                  Download All Audio
+                                                  Save All Audio
                                                 </button>
                                               </div>
                                               <div className="space-y-2 max-h-48 overflow-y-auto">
@@ -1505,8 +1765,34 @@ function ConsoleComponent() {
                                                             />
                                                           </audio>
                                                         )}
-                                                        <button className="text-xs bg-purple-50 dark:bg-purple-900/20 text-purple-600 px-2 py-1 rounded hover:bg-purple-100 dark:hover:bg-purple-900/30">
-                                                          Download
+                                                        <button
+                                                          onClick={async () => {
+                                                            try {
+                                                              const response = await fetch(
+                                                                scene.audioUrl!,
+                                                              );
+                                                              const blob =
+                                                                await response.blob();
+                                                              const url =
+                                                                URL.createObjectURL(blob);
+                                                              const link =
+                                                                document.createElement("a");
+                                                              link.href = url;
+                                                              link.download = `audio-${index + 1}-${scene.timestamp?.toFixed(1)}s.wav`;
+                                                              link.click();
+                                                              URL.revokeObjectURL(url);
+                                                              toast.success(
+                                                                "Audio file saved!",
+                                                              );
+                                                            } catch (error) {
+                                                              toast.error(
+                                                                "Failed to save audio",
+                                                              );
+                                                            }
+                                                          }}
+                                                          className="text-xs bg-purple-50 dark:bg-purple-900/20 text-purple-600 px-2 py-1 rounded hover:bg-purple-100 dark:hover:bg-purple-900/30"
+                                                        >
+                                                          Save
                                                         </button>
                                                       </div>
                                                     </Card>
@@ -1672,7 +1958,7 @@ function ConsoleComponent() {
                             Caption: "
                             {
                               pipelineState.allScenes.filter(
-                                (s) => s.processed && s.imageUrl
+                                (s) => s.processed && s.imageUrl,
                               )[selectedImageIndex]?.caption
                             }
                             "
@@ -1682,7 +1968,7 @@ function ConsoleComponent() {
                       <button
                         onClick={() => {
                           const scene = pipelineState.allScenes.filter(
-                            (s) => s.processed && s.imageUrl
+                            (s) => s.processed && s.imageUrl,
                           )[selectedImageIndex];
                           if (scene) {
                             const link = document.createElement("a");
@@ -1696,7 +1982,7 @@ function ConsoleComponent() {
                         className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
                       >
                         <Download className="h-4 w-4" />
-                        Download
+                        Save
                       </button>
                     </div>
                   </div>
