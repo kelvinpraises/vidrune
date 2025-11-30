@@ -45,8 +45,11 @@ const useColourAnalysis = () => {
 
       console.log("Average color difference:", average);
 
+      // Threshold of 15 deltaE00 - higher = less sensitive (fewer scenes captured)
+      // deltaE00 < 1: imperceptible, 1-2: perceptible through close observation
+      // 2-10: perceptible at a glance, 11-49: colors are more similar than different
       return {
-        similar: average <= 10,
+        similar: average <= 12,
         newColors: accumulatedColors,
       };
     },

@@ -467,6 +467,10 @@ export const useVideoPipeline = () => {
   }, [isProcessing, capturedScenes, processAllCaptions]);
 
   const startPipeline = useCallback(() => {
+    // Reset model caches before starting new video processing
+    florence2Service.current?.resetImageCache();
+    kokoroService.current?.reset();
+    
     resetCapture();
     processingStage.current = "capturing";
     setIsProcessing(true);
@@ -509,6 +513,10 @@ export const useVideoPipeline = () => {
       modelsLoaded: prev.modelsLoaded,
       modelProgress: prev.modelProgress,
     }));
+
+    // Reset model services to clear any cached image/audio data
+    florence2Service.current?.resetImageCache();
+    kokoroService.current?.reset();
 
     videoRef.current?.pause();
     clearAllCaptures();

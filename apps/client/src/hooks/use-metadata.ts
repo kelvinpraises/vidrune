@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
-import { loadVideoPackageFromWalrus } from "@/services/walrus-video-loader";
+import { useEffect, useState } from "react";
+
+import { listVideoPackages } from "@/services/walrus-video-loader";
 
 interface MetadataTable {
   id: string;
@@ -9,7 +10,7 @@ interface MetadataTable {
   cover: string;
   uploadedBy: string;
   createAt: Date | string;
-  videoUrl?: string; // Blob URL for the video
+  videoUrl?: string;
   scenes?: Array<{
     description: string;
     keywords: string[];
@@ -17,49 +18,96 @@ interface MetadataTable {
   capturedimgs?: string[];
 }
 
+// Module-level cache - survives component remounts
+let cachedMetadata: MetadataTable[] | null = null;
+let fetchPromise: Promise<MetadataTable[]> | null = null;
+
+async function fetchOnce(): Promise<MetadataTable[]> {
+  // Return cache if available
+  if (cachedMetadata !== null) {
+    return cachedMetadata;
+  }
+
+  // Return existing promise if fetch in progress (deduplication)
+  if (fetchPromise !== null) {
+    return fetchPromise;
+  }
+
+  // Start new fetch
+  fetchPromise = (async () => {
+    console.log("[useMetadata] Fetching video packages...");
+    const videoPackages = await listVideoPackages();
+
+    const transformed = videoPackages.map((pkg) => ({
+      id: pkg.manifest.id,
+      title: pkg.manifest.title,
+      description: pkg.manifest.description,
+      summary: pkg.manifest.summary,
+      cover: pkg.sceneUrls && pkg.sceneUrls.length > 0 ? pkg.sceneUrls[0] : "",
+      uploadedBy: pkg.manifest.uploadedBy,
+      createAt: new Date(pkg.manifest.uploadTime),
+      videoUrl: pkg.videoUrl,
+      scenes: pkg.manifest.scenes,
+      capturedimgs: pkg.sceneUrls,
+    }));
+
+    cachedMetadata = transformed;
+    console.log(`[useMetadata] Cached ${transformed.length} videos`);
+    return transformed;
+  })();
+
+  return fetchPromise;
+}
+
 export function useMetadata() {
-  const [metadata, setMetadata] = useState<MetadataTable[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [metadata, setMetadata] = useState<MetadataTable[]>(cachedMetadata || []);
+  const [isLoading, setIsLoading] = useState(cachedMetadata === null);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchMetadata = async () => {
+  useEffect(() => {
+    // If already cached, use it immediately
+    if (cachedMetadata !== null) {
+      setMetadata(cachedMetadata);
+      setIsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    fetchOnce()
+      .then((data) => {
+        if (!cancelled) {
+          setMetadata(data);
+          setIsLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Unknown error");
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const refetch = async () => {
+    // Clear cache and refetch
+    cachedMetadata = null;
+    fetchPromise = null;
     setIsLoading(true);
     try {
-      // Load video package from Walrus (currently loading from local zip)
-      const videoPackage = await loadVideoPackageFromWalrus('dummy-blob-id');
-
-      // Transform to MetadataTable format
-      const transformedData: MetadataTable = {
-        id: videoPackage.manifest.id,
-        title: videoPackage.manifest.title,
-        description: videoPackage.manifest.description,
-        summary: videoPackage.manifest.summary,
-        cover: videoPackage.sceneUrls[0] || "", // Use first scene as cover
-        uploadedBy: videoPackage.manifest.uploadedBy,
-        createAt: new Date(videoPackage.manifest.uploadTime),
-        videoUrl: videoPackage.videoUrl, // Blob URL for the video
-        scenes: videoPackage.manifest.scenes,
-        capturedimgs: videoPackage.sceneUrls, // All scene URLs
-      };
-
-      setMetadata([transformedData]);
+      const data = await fetchOnce();
+      setMetadata(data);
       setError(null);
     } catch (err) {
-      console.error("Error fetching metadata:", err);
-      setError(err instanceof Error ? err.message : "Unknown error occurred");
+      setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setIsLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchMetadata();
-  }, []);
-
-  return {
-    metadata,
-    isLoading,
-    error,
-    refetch: fetchMetadata
-  };
-} 
+  return { metadata, isLoading, error, refetch };
+}

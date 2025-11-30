@@ -23,6 +23,7 @@ const useCaptureStills = (isProcessing?: boolean) => {
   const [lastEvent, setLastEvent] = useState<ProcessEvent | null>(null);
   const videoEndedRef = useRef<boolean>(false);
   const captureCompleteRef = useRef<boolean>(false);
+  const hasFirstValidFrameRef = useRef<boolean>(false);
 
   const { canvasRef, setUpCanvas } = useCaptureCanvas(videoRef);
   const { getAverageColor, compareColorSimilarity } = useColourAnalysis();
@@ -153,6 +154,25 @@ const useCaptureStills = (isProcessing?: boolean) => {
   }, [captureImage]);
 
 
+  // Check if frame is mostly black (all color values below threshold)
+  const isBlackFrame = useCallback(
+    (colors: { r: number; g: number; b: number }[]): boolean => {
+      const BLACK_THRESHOLD = 15; // RGB values below this are considered black
+      const BLACK_RATIO = 0.9; // 90% of cells must be black to skip frame
+
+      const blackCells = colors.filter(
+        ({ r, g, b }) => r < BLACK_THRESHOLD && g < BLACK_THRESHOLD && b < BLACK_THRESHOLD
+      );
+
+      const isBlack = blackCells.length / colors.length >= BLACK_RATIO;
+      if (isBlack) {
+        console.log("Skipping black frame");
+      }
+      return isBlack;
+    },
+    []
+  );
+
   const captureScene = useCallback(() => {
     const scene = sceneRef.current;
     const video = videoRef.current;
@@ -162,29 +182,35 @@ const useCaptureStills = (isProcessing?: boolean) => {
       return;
     }
 
-    captureImage(async ({ clone, similar }) => {
+    captureImage(async ({ clone, similar, accumulatedColors }) => {
+      // Skip black frames only at the start (before first valid frame captured)
+      if (!hasFirstValidFrameRef.current && isBlackFrame(accumulatedColors)) {
+        return;
+      }
+
       if (!similar) {
+        hasFirstValidFrameRef.current = true; // Mark that we've captured a valid frame
         clone.toBlob(async (blob) => {
           if (blob) {
             const blobUrl = URL.createObjectURL(blob);
             const timestamp = video.currentTime;
             setCapturedScenes((prev) => ({
               ...prev,
-              [timestamp]: blobUrl
+              [timestamp]: blobUrl,
             }));
           }
         }, "image/jpeg");
       }
-      
+
       // Check for video end more aggressively
       if ((video.ended || video.paused) && !captureCompleteRef.current) {
-        console.log('Video ended/paused - finalizing capture');
+        console.log("Video ended/paused - finalizing capture");
         captureCompleteRef.current = true;
         updateProcessStatus("video_end");
         updateProcessStatus("all_complete");
       }
     });
-  }, [captureImage, updateProcessStatus, isProcessing]);
+  }, [captureImage, updateProcessStatus, isProcessing, isBlackFrame]);
 
   usePollingEffect(captureScene, [isProcessing], {
     interval: 500, // Faster polling for smoother movement
@@ -195,6 +221,7 @@ const useCaptureStills = (isProcessing?: boolean) => {
   const resetCapture = useCallback(() => {
     captureCompleteRef.current = false;
     videoEndedRef.current = false;
+    hasFirstValidFrameRef.current = false;
     setProcessStatus("idle");
     setLastEvent(null);
     colorsRef.current = [];
@@ -204,14 +231,15 @@ const useCaptureStills = (isProcessing?: boolean) => {
   // Separate function to fully clear everything (for complete reset)
   const clearAllCaptures = useCallback(() => {
     // Clean up blob URLs to prevent memory leaks
-    Object.values(capturedScenes).forEach(url => {
-      if (url.startsWith('blob:')) {
+    Object.values(capturedScenes).forEach((url) => {
+      if (url.startsWith("blob:")) {
         URL.revokeObjectURL(url);
       }
     });
-    
+
     captureCompleteRef.current = false;
     videoEndedRef.current = false;
+    hasFirstValidFrameRef.current = false;
     setCapturedScenes({});
     setProcessStatus("idle");
     setLastEvent(null);

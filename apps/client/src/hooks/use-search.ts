@@ -1,7 +1,6 @@
 import { useState } from "react";
-// import { MetadataTable } from "../db/config";
 
-// Temporary MetadataTable interface for compilation
+// MetadataTable interface matching frontend expectations
 interface MetadataTable {
   id: string;
   title: string;
@@ -23,6 +22,51 @@ interface SearchResult {
   metadata: MetadataTable | null;
 }
 
+// Backend VideoManifest type (from MeiliSearch)
+interface BackendSearchResult {
+  id: string;
+  title: string;
+  description?: string;
+  transcription: string;
+  sceneDescriptions: string;
+  ttsContent: string;
+  uploadedBy: string;
+  uploadTime: number;
+  tags?: string[];
+}
+
+interface BackendSearchResponse {
+  success: boolean;
+  results: BackendSearchResult[];
+  total: number;
+  query: string;
+  limit: number;
+  offset: number;
+}
+
+/**
+ * Transform backend search result to frontend MetadataTable format
+ */
+function transformToMetadata(backendResult: BackendSearchResult): MetadataTable {
+  // Extract cover image from backend result if available
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+  
+  return {
+    id: backendResult.id,
+    title: backendResult.title,
+    description: backendResult.description || '',
+    summary: backendResult.transcription.substring(0, 200) + '...', // Use first 200 chars of transcription as summary
+    cover: `${backendUrl}/api/storage/public/${backendResult.id}`, // Use video ID to construct cover URL
+    uploadedBy: backendResult.uploadedBy,
+    createAt: new Date(backendResult.uploadTime),
+    scenes: backendResult.sceneDescriptions ? [{
+      description: backendResult.sceneDescriptions,
+      keywords: backendResult.tags || []
+    }] : undefined,
+    capturedimgs: undefined
+  };
+}
+
 export function useSearch() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -38,54 +82,29 @@ export function useSearch() {
     setError(null);
 
     try {
-      // Temporarily return mock search results instead of API call
-      const mockResults: SearchResult[] = [
-        {
-          id: "search_result_1",
-          score: 0.95,
-          metadata: {
-            id: "video_1",
-            title: `Search Result for "${query}"`,
-            description: `This is a mock search result for your query: ${query}`,
-            summary: `Mock video content related to ${query}`,
-            cover: "/placeholder-image.jpg",
-            uploadedBy: "user123",
-            createAt: new Date(),
-            scenes: [
-              {
-                description: `Scene related to ${query}`,
-                keywords: [query.toLowerCase(), "search", "result"]
-              }
-            ],
-            capturedimgs: ["/placeholder-image.jpg"]
-          }
-        },
-        {
-          id: "search_result_2", 
-          score: 0.87,
-          metadata: {
-            id: "video_2",
-            title: `Another Result for "${query}"`,
-            description: `This is another mock search result for: ${query}`,
-            summary: `Additional mock video content about ${query}`,
-            cover: "/placeholder-image.jpg",
-            uploadedBy: "user456",
-            createAt: new Date(),
-            scenes: [
-              {
-                description: `Another scene about ${query}`,
-                keywords: [query.toLowerCase(), "mock", "test"]
-              }
-            ],
-            capturedimgs: ["/placeholder-image.jpg"]
-          }
-        }
-      ].slice(0, limit);
-
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 800));
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+      const url = `${backendUrl}/api/search?q=${encodeURIComponent(query)}&limit=${limit}`;
       
-      setResults(mockResults);
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error(`Search failed: ${response.statusText}`);
+      }
+
+      const data: BackendSearchResponse = await response.json();
+
+      if (!data.success) {
+        throw new Error('Search request was not successful');
+      }
+
+      // Transform backend results to frontend format
+      const transformedResults: SearchResult[] = data.results.map((result, index) => ({
+        id: result.id,
+        score: 1 - (index * 0.05), // Approximate score based on result order
+        metadata: transformToMetadata(result)
+      }));
+      
+      setResults(transformedResults);
     } catch (err) {
       console.error("Search error:", err);
       setError(err instanceof Error ? err.message : "Unknown error occurred");
