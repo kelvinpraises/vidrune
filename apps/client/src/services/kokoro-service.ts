@@ -156,6 +156,13 @@ export class KokoroService {
     return this.isModelLoaded;
   }
 
+  /**
+   * Reset any cached state in the worker for a new processing session
+   */
+  reset() {
+    this.worker?.postMessage({ type: 'reset' });
+  }
+
   dispose() {
     this.worker?.terminate();
     this.worker = null;

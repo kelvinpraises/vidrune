@@ -198,20 +198,37 @@ export const walrusStorage = {
 
   /**
    * Download a file from Walrus
+   * @param blobId - The blob ID to download
+   * @param signal - Optional AbortSignal for cancellation
    */
-  async downloadFile(blobId: string): Promise<Blob | null> {
+  async downloadFile(blobId: string, signal?: AbortSignal): Promise<Blob | null> {
     try {
-      const url = walrusStorage.getBlobUrl(blobId);
-      const response = await fetch(url);
+      // Use backend proxy to avoid CORS issues with Walrus
+      // Walrus blocks requests with Origin: localhost
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
+      const url = `${backendUrl}/api/storage/proxy/${blobId}`;
+      console.log(`[Walrus] Downloading via proxy: ${url}`);
+
+      const response = await fetch(url, {
+        method: "GET",
+        signal,
+      });
 
       if (!response.ok) {
-        console.error(`Failed to download blob: ${response.statusText}`);
+        const errorText = await response.text().catch(() => "Unable to read error");
+        console.error(`[Walrus] Download failed: ${response.status} ${response.statusText}`);
+        console.error(`[Walrus] Error body:`, errorText);
         return null;
       }
 
+      console.log(`[Walrus] ✓ Downloaded blob ${blobId}`);
       return await response.blob();
     } catch (error) {
-      console.error("Walrus download error:", error);
+      if (error instanceof Error && error.name === "AbortError") {
+        console.log(`[Walrus] Download aborted for ${blobId}`);
+        return null;
+      }
+      console.error(`[Walrus] Download error for ${blobId}:`, error);
       return null;
     }
   },
@@ -378,5 +395,8 @@ export const walrusStorage = {
     }
   },
 };
+
+// Named exports for convenience
+export const { downloadFile, uploadFile, uploadBlob, getBlobUrl, blobExists } = walrusStorage;
 
 export default walrusStorage;
