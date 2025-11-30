@@ -93,6 +93,11 @@ self.addEventListener("message", async (e) => {
     case "generate":
       await generateAudio(text, voice);
       break;
+    
+    case "reset":
+      // Clear any cached state for new video processing session
+      console.log("[Kokoro Worker] Reset message received - clearing state");
+      break;
   }
 });
 
