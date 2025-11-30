@@ -30,7 +30,7 @@ const chartConfig = {
 } satisfies ChartConfig;
 
 export function RadialChart({ data }: RadialChartProps) {
-  const totalVisitors = data[0].no + data[0].yes;
+  const totalStakes = data[0].no + data[0].yes;
 
   return (
     <div className="flex flex-col w-2/5">
@@ -38,7 +38,8 @@ export function RadialChart({ data }: RadialChartProps) {
         <ChartContainer config={chartConfig} className="w-24 min-h-12 justify-end">
           <RadialBarChart
             data={data}
-            endAngle={180}
+            startAngle={180}
+            endAngle={0}
             innerRadius={40}
             outerRadius={55}
             cy="90%"
@@ -58,7 +59,7 @@ export function RadialChart({ data }: RadialChartProps) {
                           y={(viewBox.cy || 0) - 14}
                           className="fill-foreground text-sm md:text-base font-bold"
                         >
-                          {totalVisitors.toLocaleString()}
+                          {totalStakes.toLocaleString()}
                         </tspan>
                         <tspan
                           x={viewBox.cx}
@@ -83,7 +84,7 @@ export function RadialChart({ data }: RadialChartProps) {
             <RadialBar
               dataKey="yes"
               fill="var(--color-yes)"
-              stackId="a"
+              stackId="b"
               cornerRadius={100}
               className="stroke-transparent stroke-2"
             />

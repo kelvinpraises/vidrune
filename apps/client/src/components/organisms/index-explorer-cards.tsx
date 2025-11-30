@@ -4,6 +4,57 @@ import React, { useEffect, useId, useRef, useState } from "react";
 
 import { useOutsideClick } from "@/hooks/use-outside-click";
 import { ConvictionModal } from "@/components/organisms/conviction-modal";
+import { useIsInConvictionPeriod } from "@/services/contracts";
+
+/**
+ * Conviction Button Component
+ * Shows "Convict" button if conviction period is active
+ * Shows greyed out "Conviction Time Passed" if period has ended
+ */
+interface ConvictionButtonProps {
+  videoId: string;
+  videoTitle: string;
+  onConvict: () => void;
+}
+
+const ConvictionButton: React.FC<ConvictionButtonProps> = ({ videoId, onConvict }) => {
+  const { data: isInConvictionPeriod, isLoading } = useIsInConvictionPeriod(videoId);
+
+  if (isLoading) {
+    return (
+      <button
+        disabled
+        className="px-4 py-3 text-sm rounded-full font-mono font-bold bg-gray-300 text-gray-500 cursor-not-allowed"
+      >
+        Loading...
+      </button>
+    );
+  }
+
+  if (!isInConvictionPeriod) {
+    return (
+      <button
+        disabled
+        className="px-4 py-3 text-sm rounded-full font-mono font-bold bg-gray-300 text-gray-500 cursor-not-allowed"
+        title="The conviction period for this video has ended"
+      >
+        Conviction Time Passed
+      </button>
+    );
+  }
+
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        onConvict();
+      }}
+      className="px-4 py-3 text-sm rounded-full font-mono font-bold bg-red-500 hover:bg-red-600 text-white transition-colors"
+    >
+      Convict
+    </button>
+  );
+};
 
 interface MetadataTable {
   id: string;
@@ -232,19 +283,17 @@ const IndexExplorerCards = ({
                     </p>
                   </div>
 
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
+                  <ConvictionButton
+                    videoId={active.id}
+                    videoTitle={active.title}
+                    onConvict={() => {
                       // Save which video to convict
                       setConvictionVideo({ id: active.id, title: active.title });
                       // Close the video modal
                       setActive(null);
                       setIsPlayingVideo(false);
                     }}
-                    className="px-4 py-3 text-sm rounded-full font-mono font-bold bg-red-500 hover:bg-red-600 text-white transition-colors"
-                  >
-                    Convict
-                  </button>
+                  />
                 </div>
                 <div className="flex-1 overflow-y-auto px-4">
                   <motion.div

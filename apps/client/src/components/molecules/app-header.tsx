@@ -1,4 +1,5 @@
 import { ThemeSwitcher } from "@/components/molecules/theme-switcher";
+import { ConnectButton } from "@/components/molecules/connect-button";
 import { Link } from "@tanstack/react-router";
 
 interface AppHeaderProps {
@@ -46,13 +47,11 @@ export function AppHeader({ currentPage, showConnectWallet = false }: AppHeaderP
       <div className="ml-auto flex items-center gap-4">
         <ThemeSwitcher />
         {showConnectWallet ? (
-          <button className="bg-[#33CB82] hover:bg-[#33CB82]/80 flex items-center justify-center font-semibold px-6 rounded-[0] py-4 transition-colors duration-200 whitespace-nowrap text-black">
-            Connect Wallet
-          </button>
+          <ConnectButton />
         ) : (
           <Link
             to="/console"
-            className="bg-[#33CB82] hover:bg-[#33CB82]/80 w-[18ch] flex items-center justify-center font-semibold px-6 rounded-[0] py-4 transition-colors duration-200 whitespace-nowrap text-black"
+            className="bg-[#33CB82] hover:bg-[#33CB82]/80 w-[18ch] flex items-center justify-center font-semibold px-6 py-4 transition-colors duration-200 whitespace-nowrap text-black"
           >
             Index a Video
           </Link>

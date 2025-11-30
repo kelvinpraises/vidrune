@@ -49,29 +49,69 @@ interface YesNoChartProps {
 }
 
 export function YesNoChart({ data }: YesNoChartProps) {
-  const [timeRange, setTimeRange] = React.useState("90d");
+  const [timeRange, setTimeRange] = React.useState("all");
 
-  const filteredData = data.filter((item) => {
-    const date = new Date(item.date);
-    const referenceDate = new Date(); // Use current date as reference
-    let daysToSubtract = 90;
-    if (timeRange === "30d") {
-      daysToSubtract = 30;
-    } else if (timeRange === "7d") {
-      daysToSubtract = 7;
+  const filteredData = React.useMemo(() => {
+    // Always return all data - we need at least 2 points to draw a line
+    // The time range selector is kept for future use when we have more data points
+    if (data.length <= 2) return data;
+
+    if (timeRange === "all") return data;
+
+    const referenceDate = new Date();
+    let minutesToSubtract = 60 * 24 * 7; // 7 days default
+
+    switch (timeRange) {
+      case "5m":
+        minutesToSubtract = 5;
+        break;
+      case "15m":
+        minutesToSubtract = 15;
+        break;
+      case "30m":
+        minutesToSubtract = 30;
+        break;
+      case "45m":
+        minutesToSubtract = 45;
+        break;
     }
-    const startDate = new Date(referenceDate);
-    startDate.setDate(startDate.getDate() - daysToSubtract);
-    return date >= startDate;
-  });
+
+    const startDate = new Date(referenceDate.getTime() - minutesToSubtract * 60 * 1000);
+    const filtered = data.filter((item) => new Date(item.date) >= startDate);
+
+    // Always include at least 2 points for the chart to render properly
+    if (filtered.length < 2 && data.length >= 2) {
+      // Find the closest point JUST BEFORE the filter cutoff to use as anchor
+      // This prevents jumping back to the very first data point
+      let anchorPoint = null;
+      for (let i = data.length - 1; i >= 0; i--) {
+        const itemDate = new Date(data[i].date);
+        if (itemDate < startDate) {
+          anchorPoint = data[i];
+          break;
+        }
+      }
+      
+      // If no point before cutoff, use the earliest available point
+      if (!anchorPoint && data.length > 0) {
+        anchorPoint = data[0];
+      }
+      
+      if (anchorPoint && !filtered.some((p) => p.date === anchorPoint!.date)) {
+        return [anchorPoint, ...filtered];
+      }
+    }
+
+    return filtered.length > 0 ? filtered : data;
+  }, [data, timeRange]);
 
   return (
     <Card>
       <CardHeader className="flex items-center gap-2 space-y-0 border-b sm:flex-row">
         <div className="grid flex-1 gap-1 text-center sm:text-left">
-          <CardTitle>Binary Stake Results</CardTitle>
+          <CardTitle>Vote Distribution</CardTitle>
           <CardDescription>
-            Shows the relationship between 'Yes' and 'No' stakes in real-time
+            Shows the relationship between 'Yes' and 'No' votes over time
           </CardDescription>
         </div>
         <Select value={timeRange} onValueChange={setTimeRange}>
@@ -79,17 +119,23 @@ export function YesNoChart({ data }: YesNoChartProps) {
             className="w-[160px] rounded-lg sm:ml-auto"
             aria-label="Select a value"
           >
-            <SelectValue placeholder="Last 3 months" />
+            <SelectValue placeholder="All time" />
           </SelectTrigger>
           <SelectContent className="rounded-xl">
-            <SelectItem value="90d" className="rounded-lg">
-              Last 3 months
+            <SelectItem value="all" className="rounded-lg">
+              All time
             </SelectItem>
-            <SelectItem value="30d" className="rounded-lg">
-              Last 30 days
+            <SelectItem value="45m" className="rounded-lg">
+              Last 45 min
             </SelectItem>
-            <SelectItem value="7d" className="rounded-lg">
-              Last 7 days
+            <SelectItem value="30m" className="rounded-lg">
+              Last 30 min
+            </SelectItem>
+            <SelectItem value="15m" className="rounded-lg">
+              Last 15 min
+            </SelectItem>
+            <SelectItem value="5m" className="rounded-lg">
+              Last 5 min
             </SelectItem>
           </SelectContent>
         </Select>
@@ -135,6 +181,15 @@ export function YesNoChart({ data }: YesNoChartProps) {
               minTickGap={32}
               tickFormatter={(value) => {
                 const date = new Date(value);
+                // For short time ranges, show time; for longer, show date
+                const now = new Date();
+                const diffHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+                if (diffHours < 24) {
+                  return date.toLocaleTimeString("en-US", {
+                    hour: "numeric",
+                    minute: "2-digit",
+                  });
+                }
                 return date.toLocaleDateString("en-US", {
                   month: "short",
                   day: "numeric",
@@ -146,9 +201,12 @@ export function YesNoChart({ data }: YesNoChartProps) {
               content={
                 <ChartTooltipContent
                   labelFormatter={(value) => {
-                    return new Date(value).toLocaleDateString("en-US", {
+                    const date = new Date(value);
+                    return date.toLocaleString("en-US", {
                       month: "short",
                       day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
                     });
                   }}
                   indicator="dot"

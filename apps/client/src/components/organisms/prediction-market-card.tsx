@@ -46,7 +46,7 @@ export function PredictionMarketCard({ market }: PredictionMarketCardProps) {
         </CardHeader>
 
         <CardContent>
-          <div className="flex items-center justify-between text-sm text-gray-600 mt-8">
+          <div className="flex items-center justify-between text-sm text-gray-600">
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <Timer className="w-4 h-4" />
               <span>

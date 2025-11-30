@@ -8,10 +8,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/atoms/dialog";
-import { Input } from "@/components/atoms/input";
 import { Label } from "@/components/atoms/label";
 import { Textarea } from "@/components/atoms/textarea";
 import { toast } from "sonner";
+import { useSubmitConviction } from "@/services/contracts";
+import { uploadToWalrus } from "@/services/walrus-client";
 
 interface ConvictionModalProps {
   videoId: string;
@@ -20,7 +21,11 @@ interface ConvictionModalProps {
   onOpenChange?: (open: boolean) => void; // Callback to notify parent when modal opens/closes
 }
 
-export function ConvictionModal({ videoId, open: controlledOpen, onOpenChange }: ConvictionModalProps) {
+export function ConvictionModal({
+  videoId,
+  open: controlledOpen,
+  onOpenChange,
+}: ConvictionModalProps) {
   const [internalOpen, setInternalOpen] = useState(false);
 
   // Use controlled open if provided, otherwise use internal state
@@ -34,7 +39,14 @@ export function ConvictionModal({ videoId, open: controlledOpen, onOpenChange }:
   };
   const [fact, setFact] = useState("");
   const [proofs, setProofs] = useState<string[]>([""]);
-  const [stakeAmount, setStakeAmount] = useState("0.1");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState<string>("");
+
+  // Contract hooks
+  const { submitConviction, isPending } = useSubmitConviction();
+
+  // Combined loading state - prevent any action while submitting
+  const isLoading = isSubmitting || isPending;
 
   const addProofField = () => {
     setProofs([...proofs, ""]);
@@ -55,6 +67,11 @@ export function ConvictionModal({ videoId, open: controlledOpen, onOpenChange }:
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Prevent double submission
+    if (isLoading) {
+      return;
+    }
+
     if (!fact.trim()) {
       toast.error("Please provide a fact");
       return;
@@ -66,26 +83,52 @@ export function ConvictionModal({ videoId, open: controlledOpen, onOpenChange }:
       return;
     }
 
-    if (parseFloat(stakeAmount) < 0.1) {
-      toast.error("Minimum stake is 0.1 ROHR");
-      return;
+    setIsSubmitting(true);
+
+    try {
+      // Step 1: Create conviction data
+      setSubmitStatus("Preparing conviction data...");
+      toast.info("Preparing conviction data...");
+
+      const convictionData = {
+        fact,
+        proofs: filledProofs,
+        timestamp: Date.now(),
+      };
+
+      // Step 2: Upload to Walrus
+      setSubmitStatus("Uploading to storage...");
+      toast.info("Uploading conviction proof to storage...");
+
+      const convictionBlob = new Blob([JSON.stringify(convictionData)], {
+        type: "application/json",
+      });
+      const uploadResult = await uploadToWalrus(convictionBlob, "conviction.json");
+
+      if (!uploadResult.success || !uploadResult.blobId) {
+        throw new Error(uploadResult.error || "Failed to upload conviction data");
+      }
+
+      // Step 3: Submit to blockchain
+      setSubmitStatus("Submitting to blockchain...");
+      toast.info("Submitting conviction to blockchain...");
+
+      await submitConviction(videoId, uploadResult.blobId);
+
+      toast.success("Conviction submitted successfully!");
+
+      // Reset form and close
+      setFact("");
+      setProofs([""]);
+      setSubmitStatus("");
+      handleOpenChange(false);
+    } catch (error) {
+      console.error("Failed to submit conviction:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to submit conviction");
+      setSubmitStatus("");
+    } finally {
+      setIsSubmitting(false);
     }
-
-    // TODO: Submit conviction to smart contract
-    console.log("Conviction submitted:", {
-      videoId,
-      fact,
-      proofs: filledProofs,
-      stakeAmount: parseFloat(stakeAmount),
-    });
-
-    toast.success("Conviction submitted successfully!");
-
-    // Reset form and close
-    setFact("");
-    setProofs([""]);
-    setStakeAmount("0.1");
-    handleOpenChange(false);
   };
 
   return (
@@ -158,32 +201,15 @@ export function ConvictionModal({ videoId, open: controlledOpen, onOpenChange }:
             </Button>
           </div>
 
-          {/* Stake amount */}
-          <div className="space-y-2">
-            <Label htmlFor="stake">Stake Amount (ROHR)</Label>
-            <Input
-              id="stake"
-              type="number"
-              min="0.1"
-              step="0.1"
-              placeholder="0.1"
-              value={stakeAmount}
-              onChange={(e) => setStakeAmount(e.target.value)}
-              required
-            />
-            <p className="text-xs text-muted-foreground">
-              Minimum stake: 0.1 ROHR
-            </p>
-          </div>
-
           <div className="flex gap-3">
-            <Button type="submit" className="flex-1">
-              Submit Conviction
+            <Button type="submit" className="flex-1" disabled={isLoading}>
+              {isLoading ? submitStatus || "Submitting..." : "Submit Conviction"}
             </Button>
             <Button
               type="button"
               variant="outline"
               onClick={() => handleOpenChange(false)}
+              disabled={isLoading}
             >
               Cancel
             </Button>

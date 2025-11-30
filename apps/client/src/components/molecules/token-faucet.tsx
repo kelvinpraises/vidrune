@@ -3,8 +3,6 @@
 import * as React from "react";
 import { toast } from "sonner";
 
-import { cn } from "@/utils";
-import { useMediaQuery } from "@/hooks/use-media-query";
 import { Button } from "@/components/atoms/button";
 import {
   Dialog,
@@ -24,6 +22,8 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/atoms/drawer";
+import { useMediaQuery } from "@/hooks/use-media-query";
+import { cn } from "@/utils";
 
 interface TokenFaucetProps {
   children: React.ReactNode;
@@ -31,7 +31,11 @@ interface TokenFaucetProps {
   onBalanceUpdate: () => void;
 }
 
-export function TokenFaucet({ children, currentBalance, onBalanceUpdate }: TokenFaucetProps) {
+export function TokenFaucet({
+  children,
+  currentBalance,
+  onBalanceUpdate,
+}: TokenFaucetProps) {
   const [open, setOpen] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
   const isDesktop = useMediaQuery("(min-width: 768px)");
@@ -40,8 +44,9 @@ export function TokenFaucet({ children, currentBalance, onBalanceUpdate }: Token
     setIsLoading(true);
     try {
       // Mock faucet - for demo purposes
-      // TODO: Integrate with actual ROHR token contract on SUI
-      await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate network delay
+      // Note: PointsRegistry contract does not currently support public minting.
+      // This simulation allows the UI to demonstrate the flow.
+      await new Promise((resolve) => setTimeout(resolve, 1500)); // Simulate network delay
 
       toast.success("Tokens claimed successfully!", {
         description: "100 ROHR tokens added to your wallet",
@@ -79,11 +84,7 @@ export function TokenFaucet({ children, currentBalance, onBalanceUpdate }: Token
         </div>
       </div>
 
-      <Button
-        onClick={handleClaimTokens}
-        disabled={isLoading}
-        className="w-full"
-      >
+      <Button onClick={handleClaimTokens} disabled={isLoading} className="w-full">
         {isLoading ? "Claiming..." : "Claim 100 ROHR Tokens"}
       </Button>
 
@@ -96,9 +97,7 @@ export function TokenFaucet({ children, currentBalance, onBalanceUpdate }: Token
   if (isDesktop) {
     return (
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild>
-          {children}
-        </DialogTrigger>
+        <DialogTrigger asChild>{children}</DialogTrigger>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>ROHR Token Faucet</DialogTitle>
@@ -114,9 +113,7 @@ export function TokenFaucet({ children, currentBalance, onBalanceUpdate }: Token
 
   return (
     <Drawer open={open} onOpenChange={setOpen}>
-      <DrawerTrigger asChild>
-        {children}
-      </DrawerTrigger>
+      <DrawerTrigger asChild>{children}</DrawerTrigger>
       <DrawerContent>
         <DrawerHeader className="text-left">
           <DrawerTitle>ROHR Token Faucet</DrawerTitle>
