@@ -10,6 +10,7 @@ import { Tabs, TabsContent } from "@/components/atoms/tabs";
 import { AppHeader } from "@/components/molecules/app-header";
 import IndexExplorerCards from "@/components/organisms/index-explorer-cards";
 import { PredictionMarketCard } from "@/components/organisms/prediction-market-card";
+import { ActivityFeed } from "@/components/organisms/activity-feed";
 import { usePredictionMarkets } from "@/hooks/use-prediction-markets";
 import { useSearch } from "@/hooks/use-search";
 import clampBuilder from "@/utils/clamp-builder";
@@ -101,6 +102,14 @@ function HomeComponent() {
                 )}
               </div>
 
+              {/* Global Activity Feed Section */}
+              <div className="w-full max-w-6xl mx-auto px-4 py-16">
+                <h2 className="text-2xl md:text-3xl font-medium mb-8 text-center">
+                  Live Activity Feed
+                </h2>
+                <ActivityFeed />
+              </div>
+
               {/* Footer with Barcode */}
               <footer className="w-full flex justify-center py-12">
                 <img alt="vidrune barcode" src="/vidrune.png" width={312} height={100} />
@@ -111,7 +120,7 @@ function HomeComponent() {
             value="result"
             className="m-0 outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
           >
-            <div className="relative flex flex-col items-center px-4 gap-4">
+            <div className="relative flex flex-col items-center px-4 gap-4 pt-32">
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -124,7 +133,7 @@ function HomeComponent() {
                 <div className="absolute bottom-0 right-[20%] w-[30rem] h-[30rem] bg-[#1ca0fb]/10 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-6000" />
               </motion.div>
               <div className="w-full max-w-6xl mx-auto py-8">
-                <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center justify-between mb-12">
                   <button
                     onClick={() => setActiveTab("home")}
                     className="flex items-center gap-2 px-4 py-3 text-sm font-mono font-medium bg-white dark:bg-[#1D1F21] text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-white border border-gray-200 dark:border-gray-800 rounded-sm"

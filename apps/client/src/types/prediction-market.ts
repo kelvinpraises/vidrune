@@ -4,11 +4,17 @@ export interface PredictionMarket {
   videoTitle: string;
   thumbnailUrl: string;
   question: string; // e.g., "Are tags incomplete?"
-  status: "active" | "resolved";
+  status: "active" | "closed" | "resolved";
   totalStaked: number; // ROHR amount
+  yesVotes: number; // Actual vote count
+  noVotes: number; // Actual vote count
   yesPercentage: number;
   noPercentage: number;
-  endDate: number; // Unix timestamp
+  createdAt: number; // Unix timestamp when market was created
+  endDate: number; // Unix timestamp when market expires
+  expiresAt?: number; // Unix timestamp when market expires (from contract)
+  resolved?: boolean; // Whether market has been resolved
+  winningSide?: boolean; // true = YES won, false = NO won
   convictions: Conviction[]; // Convictions that seeded this market
 }
 

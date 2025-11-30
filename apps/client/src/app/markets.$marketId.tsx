@@ -6,7 +6,7 @@ import {
 } from "@/components/atoms/accordion";
 import { Button } from "@/components/atoms/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/atoms/card";
-import { Input } from "@/components/atoms/input";
+
 import { Separator } from "@/components/atoms/separator";
 import { Skeleton } from "@/components/atoms/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/atoms/tabs";
@@ -14,19 +14,121 @@ import { AppHeader } from "@/components/molecules/app-header";
 import { RadialChart } from "@/components/organisms/radial-chart";
 import { YesNoChart } from "@/components/organisms/yes-no-chart";
 import { usePredictionMarkets } from "@/hooks/use-prediction-markets";
+import { useVoteYes, useVoteNo, PREDICTION_MARKET_ADDRESS } from "@/services/contracts";
+import { predictionMarketAbi } from "@/contracts/generated";
+import { subscribeToMarketOdds, type MarketOdds } from "@/services/somnia-streams";
 import { ellipsisAddress, isValidUrl } from "@/utils";
 import { useParams } from "@tanstack/react-router";
 import { formatDistanceToNow } from "date-fns";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { readContract } from "wagmi/actions";
+import { config } from "@/providers/wagmi/config";
+
+// Activity type enum from contract
+enum ActivityType {
+  MarketCreated = 0,
+  VoteCast = 1,
+  MarketClosed = 2,
+  MarketResolved = 3,
+}
+
+interface ContractActivity {
+  activityType: number;
+  user: string;
+  marketId: string;
+  isYes: boolean;
+  timestamp: bigint;
+}
 
 function MarketTradingPage() {
   const { marketId } = useParams({ from: "/markets/$marketId" });
   const { markets, isLoading: originalLoading } = usePredictionMarkets();
   const market = markets.find((m) => m.id === marketId);
 
-  const [stakeAmount, setStakeAmount] = useState(0);
+  const { voteYes, isPending: isVotingYes } = useVoteYes();
+  const { voteNo, isPending: isVotingNo } = useVoteNo();
+
   const [isStaking, setIsStaking] = useState(false);
+
+  // Real-time odds from Somnia Data Streams
+  const [liveOdds, setLiveOdds] = useState<MarketOdds | null>(null);
+
+  // Activities from contract
+  const [activities, setActivities] = useState<
+    Array<{
+      id: string;
+      user: string;
+      action: string;
+      choice: "Yes" | "No";
+      amount: number;
+      timestamp: number;
+      avatar: string;
+    }>
+  >([]);
+
+  // Fetch activities from contract
+  useEffect(() => {
+    if (!marketId) return;
+
+    const fetchActivities = async () => {
+      try {
+        const contractActivities = (await readContract(config, {
+          address: PREDICTION_MARKET_ADDRESS,
+          abi: predictionMarketAbi,
+          functionName: "getMarketActivities",
+          args: [marketId],
+        })) as ContractActivity[];
+
+        // Transform contract activities to display format
+        const transformed = contractActivities
+          .filter((a) => a.activityType === ActivityType.VoteCast)
+          .map((a, idx) => ({
+            id: `${a.marketId}-${idx}`,
+            user: a.user,
+            action: "voted",
+            choice: (a.isYes ? "Yes" : "No") as "Yes" | "No",
+            amount: 1, // Each vote is 1
+            timestamp: Number(a.timestamp) * 1000,
+            avatar: `https://avatar.vercel.sh/${a.user}`,
+          }))
+          .reverse(); // Most recent first
+
+        setActivities(transformed);
+      } catch (error) {
+        console.error("Failed to fetch activities:", error);
+      }
+    };
+
+    fetchActivities();
+  }, [marketId, liveOdds]); // Refetch when liveOdds changes (new vote)
+
+  // Subscribe to real-time market odds updates
+  useEffect(() => {
+    if (!marketId) return;
+
+    let unsubscribe: (() => void) | undefined;
+
+    const setupSubscription = async () => {
+      try {
+        const unsub = await subscribeToMarketOdds(marketId, (odds: MarketOdds) => {
+          setLiveOdds(odds);
+        });
+
+        unsubscribe = unsub;
+      } catch (error) {
+        console.error("Failed to subscribe to market odds:", error);
+      }
+    };
+
+    setupSubscription();
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [marketId]);
 
   if (originalLoading) {
     return (
@@ -75,87 +177,64 @@ function MarketTradingPage() {
   }
 
   const handleStake = async (isYes: boolean) => {
-    if (!stakeAmount) return;
+    if (!marketId) return;
 
     setIsStaking(true);
     try {
-      // TODO: Call SUI smart contract
-      console.log(`Staking ${stakeAmount} ROHR on ${isYes ? "YES" : "NO"}`);
-      toast.success(`Successfully staked ${stakeAmount} ROHR for ${isYes ? "YES" : "NO"}`);
+      if (isYes) {
+        await voteYes(marketId);
+      } else {
+        await voteNo(marketId);
+      }
+
+      toast.success(`Successfully voted ${isYes ? "YES" : "NO"}`);
     } catch (error) {
-      console.error("Error staking:", error);
-      toast.error("Failed to stake");
+      console.error("Error voting:", error);
+      toast.error("Failed to vote. Please try again.");
     } finally {
       setIsStaking(false);
     }
   };
 
-  // Dummy data for charts - generate dates for last 30 days
-  const timeSeriesData = Array.from({ length: 30 }, (_, i) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (29 - i)); // 30 days ago to today
-    return {
-      date: date.toISOString().split("T")[0],
-      yes: 40 + Math.floor(Math.random() * 30),
-      no: 30 + Math.floor(Math.random() * 20),
-    };
-  });
+  // Use real market data for chart - start from creation with 0, then current state
+  const yesPercent = liveOdds?.yesPercentage ?? market.yesPercentage;
+  const noPercent = liveOdds?.noPercentage ?? market.noPercentage;
+
+  // Create time series with start point (0,0) and current state
+  const createdDate = new Date(market.createdAt);
+  const now = new Date();
+
+  const timeSeriesData = [
+    {
+      date: createdDate.toISOString(),
+      yes: 0,
+      no: 0,
+    },
+    {
+      date: now.toISOString(),
+      yes: yesPercent,
+      no: noPercent,
+    },
+  ];
+
+  // Use live vote counts if available, otherwise use actual market vote counts
+  const yesVotes = liveOdds?.yesCount ?? market.yesVotes ?? 0;
+  const noVotes = liveOdds?.noCount ?? market.noVotes ?? 0;
+
+  // Check if market is expired (voting period ended)
+  const expiryTime = market.expiresAt ?? market.endDate;
+  const isExpired = expiryTime ? new Date() >= new Date(expiryTime) : false;
+  const isResolved = market.status === "resolved";
 
   const radialData = [
     {
       type: "vote",
-      yes: market.yesPercentage,
-      no: market.noPercentage,
+      yes: yesVotes,
+      no: noVotes,
     },
   ];
 
-  const recentActivity = [
-    {
-      id: "1",
-      user: "0x849290385d44652f",
-      action: "staked",
-      choice: "Yes" as const,
-      amount: 2.5,
-      timestamp: Date.now() - 5 * 60 * 1000,
-      avatar: `https://avatar.vercel.sh/0x849290385d44652f`,
-    },
-    {
-      id: "2",
-      user: "0xa12b34c56d78e90f",
-      action: "staked",
-      choice: "No" as const,
-      amount: 1.8,
-      timestamp: Date.now() - 15 * 60 * 1000,
-      avatar: `https://avatar.vercel.sh/0xa12b34c56d78e90f`,
-    },
-    {
-      id: "3",
-      user: "0xdef456789abcdef0",
-      action: "staked",
-      choice: "Yes" as const,
-      amount: 3.2,
-      timestamp: Date.now() - 30 * 60 * 1000,
-      avatar: `https://avatar.vercel.sh/0xdef456789abcdef0`,
-    },
-    {
-      id: "4",
-      user: "0x123abc456def789g",
-      action: "staked",
-      choice: "No" as const,
-      amount: 0.5,
-      timestamp: Date.now() - 45 * 60 * 1000,
-      avatar: `https://avatar.vercel.sh/0x123abc456def789g`,
-    },
-    {
-      id: "5",
-      user: "0xfedcba9876543210",
-      action: "staked",
-      choice: "Yes" as const,
-      amount: 5.0,
-      timestamp: Date.now() - 60 * 60 * 1000,
-      avatar: `https://avatar.vercel.sh/0xfedcba9876543210`,
-    },
-  ];
+  // Activities are now fetched from contract via useEffect above
 
   return (
     <>
@@ -193,7 +272,7 @@ function MarketTradingPage() {
                   <div className="text-2xl font-bold">{ellipsisAddress(market.id)}</div>
                   <p className="text-xs text-muted-foreground">
                     Created{" "}
-                    {formatDistanceToNow(Date.now() - 2 * 60 * 60 * 1000, {
+                    {formatDistanceToNow(market.createdAt, {
                       addSuffix: true,
                     })}
                   </p>
@@ -206,14 +285,15 @@ function MarketTradingPage() {
 
               <div className="w-1/2">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Staked</CardTitle>
+                  <CardTitle className="text-sm font-medium">Total Votes</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-center text-2xl font-bold">
-                    {market.totalStaked}&nbsp;{" "}
-                    <span className="text-lg font-medium">ROHR</span>
+                    {yesVotes + noVotes}
                   </div>
-                  <p className="text-xs text-muted-foreground">+0% from last month</p>
+                  <p className="text-xs text-muted-foreground">
+                    {yesVotes} Yes • {noVotes} No
+                  </p>
                 </CardContent>
               </div>
             </Card>
@@ -275,57 +355,106 @@ function MarketTradingPage() {
             <TabsContent value="market" className="space-y-10">
               <YesNoChart data={timeSeriesData} />
 
-              <div className="flex gap-5 pt-5">
-                <Input
-                  placeholder="Enter stake amount (ROHR)"
-                  className="h-12"
-                  type="number"
-                  value={stakeAmount}
-                  onChange={(e) => setStakeAmount(Number(e.target.value))}
-                />
-                <RadialChart data={radialData} />
-              </div>
-              <div className="flex gap-8">
-                <Button
-                  className="flex-1 h-12 bg-green-500 hover:bg-green-400"
-                  onClick={() => handleStake(true)}
-                  disabled={isStaking || !stakeAmount}
-                >
-                  {isStaking ? "Staking..." : "Stake YES"}
-                </Button>
-                <Button
-                  className="flex-1 h-12 bg-red-500 hover:bg-red-400"
-                  onClick={() => handleStake(false)}
-                  disabled={isStaking || !stakeAmount}
-                >
-                  {isStaking ? "Staking..." : "Stake NO"}
-                </Button>
-              </div>
+              {/* Show different UI based on market state */}
+              {!isExpired && !isResolved ? (
+                <>
+                  {/* Voting period - show vote buttons */}
+                  <div className="flex gap-5 pt-5">
+                    <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                      <p className="text-sm text-blue-800 dark:text-blue-200">
+                        <span className="font-medium">Test Mode:</span> Simply click YES or
+                        NO to cast your vote. No staking required during testing.
+                      </p>
+                    </div>
+                    <RadialChart data={radialData} />
+                  </div>
+                  <div className="flex gap-8">
+                    <Button
+                      className="flex-1 h-12 bg-green-500 hover:bg-green-400"
+                      onClick={() => handleStake(true)}
+                      disabled={isStaking || isVotingYes || isVotingNo}
+                    >
+                      {isVotingYes ? "Voting..." : "Vote YES"}
+                    </Button>
+                    <Button
+                      className="flex-1 h-12 bg-red-500 hover:bg-red-400"
+                      onClick={() => handleStake(false)}
+                      disabled={isStaking || isVotingYes || isVotingNo}
+                    >
+                      {isVotingNo ? "Voting..." : "Vote NO"}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Resolution period - show results */}
+                  <div className="flex gap-5 pt-5">
+                    <div className="flex-1 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+                      <p className="text-sm text-amber-800 dark:text-amber-200">
+                        <span className="font-medium">
+                          {isResolved ? "Market Resolved" : "Voting Ended"}
+                        </span>
+                        {isResolved
+                          ? ` — Winner: ${yesVotes >= noVotes ? "YES" : "NO"}`
+                          : " — Awaiting resolution"}
+                      </p>
+                    </div>
+                    <RadialChart data={radialData} />
+                  </div>
+                  <div className="flex gap-8">
+                    <div
+                      className={`flex-1 h-12 rounded-md flex items-center justify-center font-medium ${
+                        yesVotes >= noVotes
+                          ? "bg-green-500/20 border-2 border-green-500 text-green-600"
+                          : "bg-green-500/10 text-green-600/50"
+                      }`}
+                    >
+                      YES: {yesVotes} votes ({yesPercent}%)
+                    </div>
+                    <div
+                      className={`flex-1 h-12 rounded-md flex items-center justify-center font-medium ${
+                        noVotes > yesVotes
+                          ? "bg-red-500/20 border-2 border-red-500 text-red-600"
+                          : "bg-red-500/10 text-red-600/50"
+                      }`}
+                    >
+                      NO: {noVotes} votes ({noPercent}%)
+                    </div>
+                  </div>
+                </>
+              )}
             </TabsContent>
 
             <TabsContent value="activities" className="space-y-4">
               <div className="space-y-8">
-                {recentActivity.map((item) => (
-                  <div key={item.id} className="flex items-center gap-3 justify-between">
-                    <img src={item.avatar} alt="" className="w-8 h-8 rounded-full" />
-                    <div className="flex-1">
-                      <div className="text-sm">
-                        <span className="font-medium">{item.user}</span> {item.action}{" "}
-                        <span
-                          className={
-                            item.choice === "Yes" ? "text-green-600" : "text-red-600"
-                          }
-                        >
-                          {item.choice}
-                        </span>{" "}
-                        at (${item.amount})
+                {activities.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>No activity yet</p>
+                    <p className="text-sm">Be the first to vote on this market!</p>
+                  </div>
+                ) : (
+                  activities.map((item) => (
+                    <div key={item.id} className="flex items-center gap-3 justify-between">
+                      <img src={item.avatar} alt="" className="w-8 h-8 rounded-full" />
+                      <div className="flex-1">
+                        <div className="text-sm">
+                          <span className="font-medium">{ellipsisAddress(item.user)}</span>{" "}
+                          {item.action}{" "}
+                          <span
+                            className={
+                              item.choice === "Yes" ? "text-green-600" : "text-red-600"
+                            }
+                          >
+                            {item.choice}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {formatDistanceToNow(item.timestamp, { addSuffix: true })}
                       </div>
                     </div>
-                    <div className="text-sm text-gray-500">
-                      {formatDistanceToNow(item.timestamp, { addSuffix: true })}
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </TabsContent>
           </Tabs>

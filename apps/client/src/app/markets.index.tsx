@@ -3,21 +3,12 @@ import { Skeleton } from "@/components/atoms/skeleton";
 import { AppHeader } from "@/components/molecules/app-header";
 import { PredictionMarketCard } from "@/components/organisms/prediction-market-card";
 import { usePredictionMarkets } from "@/hooks/use-prediction-markets";
-import { useEffect, useState } from "react";
 
 function MarketsIndexPage() {
   const { markets, isLoading: originalLoading } = usePredictionMarkets();
 
-  // TODO: Remove this delay after testing - temporary 10 second delay
-  const [isLoading, setIsLoading] = useState(true);
-  useEffect(() => {
-    if (!originalLoading) {
-      const timer = setTimeout(() => {
-        setIsLoading(false);
-      }, 10000); // 10 seconds
-      return () => clearTimeout(timer);
-    }
-  }, [originalLoading]);
+  // Use original loading state directly
+  const isLoading = originalLoading;
 
   return (
     <>

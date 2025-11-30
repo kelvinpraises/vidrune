@@ -14,7 +14,6 @@ import { z } from "zod";
 import ConsoleComponent from "@/app/console.tsx";
 import ExploreComponent from "@/app/explore.tsx";
 import HomeComponent from "@/app/index.tsx";
-import GoogleCallbackComponent from "@/app/auth/google/callback.tsx";
 import MarketsIndexComponent from "@/app/markets.index.tsx";
 import MarketDetailComponent from "@/app/markets.$marketId.tsx";
 import { Toaster } from "@/components/atoms/sonner";
@@ -54,12 +53,6 @@ const datasetsRoute = createRoute({
   component: ExploreComponent,
 });
 
-const googleCallbackRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "auth/google/callback",
-  component: GoogleCallbackComponent,
-});
-
 const marketsIndexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "markets",
@@ -76,7 +69,6 @@ const routeTree = rootRoute.addChildren([
   indexRoute,
   consoleRoute,
   datasetsRoute,
-  googleCallbackRoute,
   marketsIndexRoute,
   marketDetailRoute,
 ]);

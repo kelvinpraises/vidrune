@@ -14,7 +14,7 @@ import {
 import type { GlobeMethods } from "react-globe.gl";
 import { toast } from "sonner";
 
-import { useZkLoginAccount } from "@/providers/zklogin-provider";
+import { useAccount } from "wagmi";
 
 import {
   Accordion,
@@ -29,7 +29,9 @@ import { FileUpload } from "@/components/molecules/file-upload";
 import StandbyButton from "@/components/molecules/standby-button";
 import { ThemeSwitcher } from "@/components/molecules/theme-switcher";
 import { UserIndexedVideos } from "@/components/organisms/user-indexed-videos";
+import { ProcessingTicker } from "@/components/organisms/processing-ticker";
 import { useVideoPipeline } from "@/hooks/use-video-pipeline";
+import { useSubmitVideoIndex, useGetUserPoints } from "@/services/contracts";
 import { useTheme } from "@/providers/theme";
 import useStore from "@/store";
 
@@ -46,11 +48,8 @@ function ConsoleComponent() {
   const [showComponent, setShowComponent] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
 
-  // zkLogin authentication
-  const zkLoginAccount = useZkLoginAccount();
-
-  // TODO: Replace with Internet Computer authentication
-  const [icAuth] = useState({ isConnected: true, principal: "mock-principal" });
+  // Wagmi authentication
+  const { address, isConnected } = useAccount();
 
   // Video file input
   const [selectedVideo, setSelectedVideo] = useState<File | null>(null);
@@ -89,8 +88,12 @@ function ConsoleComponent() {
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
   const [isLandscape, setIsLandscape] = useState(true);
 
-  const { completedIndexes, scenesProcessed } = useStore();
+  const { addUserVideo } = useStore();
   const { resolvedTheme } = useTheme();
+  const { submitVideoIndex } = useSubmitVideoIndex();
+  
+  // Get user points from blockchain
+  const { data: userPoints } = useGetUserPoints(address ?? null);
 
   const gData = useMemo(
     () =>
@@ -101,7 +104,7 @@ function ConsoleComponent() {
         color: POINT_COLORS[Math.floor(Math.random() * POINT_COLORS.length)],
         crystal: CRYSTAL_TYPES[Math.floor(Math.random() * CRYSTAL_TYPES.length)],
       })),
-    [],
+    []
   );
 
   useEffect(() => {
@@ -138,7 +141,16 @@ function ConsoleComponent() {
     (files: File[]) => {
       const file = files[0];
       if (file && file.type.startsWith("video/")) {
+        // Reset pipeline state before loading new video
+        resetPipeline();
+
         setSelectedVideo(file);
+
+        // Reset metadata for new video
+        setVideoMetadata({
+          title: file.name.replace(/\.[^/.]+$/, ""), // Auto-populate with filename
+          description: "",
+        });
 
         // ALWAYS load video for preview regardless of mode
         if (videoRef.current) {
@@ -148,19 +160,12 @@ function ConsoleComponent() {
           console.log("Video loaded for preview:", file.name);
         }
 
-        // Auto-populate title with filename
-        if (!videoMetadata.title) {
-          setVideoMetadata((prev) => ({
-            ...prev,
-            title: file.name.replace(/\.[^/.]+$/, ""), // Remove file extension
-          }));
-        }
         toast.success(`Video selected: ${file.name}`);
       } else {
         toast.error("Please select a valid video file");
       }
     },
-    [videoMetadata.title],
+    [resetPipeline, videoRef]
   );
 
   // Unused - keeping for potential future use
@@ -248,7 +253,7 @@ function ConsoleComponent() {
         ...metadata,
         title: videoMetadata.title,
         description: videoMetadata.description,
-        uploadedBy: zkLoginAccount?.address || "anonymous",
+        uploadedBy: address || "anonymous",
         uploadTime: Date.now(),
       };
 
@@ -285,35 +290,75 @@ function ConsoleComponent() {
       // Check 10 MiB limit
       if (zipBlob.size > 10 * 1024 * 1024) {
         toast.error(
-          `ZIP package size (${(zipBlob.size / 1024 / 1024).toFixed(2)} MB) exceeds 10 MB limit. Please use a shorter video.`
+          `ZIP package size (${(zipBlob.size / 1024 / 1024).toFixed(
+            2
+          )} MB) exceeds 10 MB limit. Please use a shorter video.`
         );
         return;
       }
 
-      toast.info(`Uploading ${(zipBlob.size / 1024 / 1024).toFixed(2)} MB ZIP to Walrus...`);
+      toast.info(
+        `Uploading ${(zipBlob.size / 1024 / 1024).toFixed(2)} MB ZIP to storage...`
+      );
 
-      // Upload to Walrus
-      const walrusStorage = await import("@/services/walrus-storage");
-      // Convert Blob to File for walrus upload
+      // Upload ZIP to backend storage
+      const { uploadBlob } = await import("@/services/storage");
       const zipFile = new File([zipBlob], "video-index.zip", { type: "application/zip" });
-      const blobId = await walrusStorage.default.uploadFile(zipFile, (progress) => {
-        if (progress % 10 === 0) {
-          toast.info(`Upload progress: ${progress}%`);
-        }
-      });
+      const uploadResult = await uploadBlob(zipFile, "video-index.zip");
 
-      if (!blobId) {
-        toast.error("Upload failed. Please try again.");
+      if (!uploadResult.success || !uploadResult.blobId) {
+        toast.error(`Upload failed: ${uploadResult.error || "Unknown error"}`);
         return;
       }
 
-      toast.success(`Video indexed successfully! Blob ID: ${blobId}`);
-      console.log("Walrus Blob ID:", blobId);
-      console.log("Access URL:", `https://aggregator.walrus-testnet.walrus.space/v1/${blobId}`);
+      const blobId = uploadResult.blobId;
+
+      // 1. Submit to blockchain first
+      toast.info("Registering video on blockchain...");
+      await submitVideoIndex(blobId, blobId);
+      console.log('Video registered on blockchain');
+
+      // 2. Index in backend (MeiliSearch + SDS events)
+      toast.info("Indexing video for search...");
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+      const registerResponse = await fetch(`${backendUrl}/api/video/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          videoId: blobId,
+          walrusBlobId: blobId,
+          metadata: enrichedMetadata
+        }),
+      });
+
+      if (!registerResponse.ok) {
+        const errorData = await registerResponse.json();
+        throw new Error(errorData.message || 'Video registration failed');
+      }
+
+      const registerData = await registerResponse.json();
+      console.log('Video indexed:', registerData);
+
+      // Save to local store for "My Videos" tab
+      addUserVideo({
+        blobId,
+        title: videoMetadata.title,
+        description: videoMetadata.description,
+        uploadedAt: Date.now(),
+        fileSize: selectedVideo.size,
+        scenesCount: processedScenes.length,
+        status: "indexed",
+      });
+
+      toast.success(`Video package uploaded and indexed! Blob ID: ${blobId}`);
+      console.log("Video Blob ID:", blobId);
+      console.log("Access URL:", uploadResult.url);
     } catch (error) {
       console.error("Index upload error:", error);
       toast.error(
-        `Upload failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+        `Upload failed: ${error instanceof Error ? error.message : "Unknown error"}`
       );
     }
   }, [
@@ -322,6 +367,9 @@ function ConsoleComponent() {
     pipelineState.allScenes,
     generateSRTFile,
     generateMetadata,
+    address,
+    submitVideoIndex,
+    addUserVideo,
   ]);
 
   const handleVideoProcessing = useCallback(async () => {
@@ -349,7 +397,7 @@ function ConsoleComponent() {
           videoRef.current.videoHeight > 0
         ) {
           console.log(
-            `Video ready: ${videoRef.current.videoWidth}x${videoRef.current.videoHeight}`,
+            `Video ready: ${videoRef.current.videoWidth}x${videoRef.current.videoHeight}`
           );
           startPipeline();
           toast.success("Video processing started!");
@@ -370,7 +418,7 @@ function ConsoleComponent() {
           videoRef.current.videoHeight > 0
         ) {
           console.log(
-            `Video data ready: ${videoRef.current.videoWidth}x${videoRef.current.videoHeight}`,
+            `Video data ready: ${videoRef.current.videoWidth}x${videoRef.current.videoHeight}`
           );
           startPipeline();
           toast.success("Video processing started!");
@@ -380,8 +428,8 @@ function ConsoleComponent() {
   }, [selectedVideo, videoMetadata, videoRef, startPipeline]);
 
   const handleStandbyClick = async () => {
-    if (!icAuth.isConnected) {
-      toast.error("Please connect your identity to continue");
+    if (!isConnected) {
+      toast.error("Please connect your wallet to continue");
       return;
     }
 
@@ -472,20 +520,22 @@ function ConsoleComponent() {
       <div className="relative z-10 flex flex-col items-center gap-8 flex-1 w-full">
         {/* Header */}
         <header className="flex items-center p-4 gap-4 w-full">
-          <img
-            alt="vidrune logo"
-            src="/logo-light.png"
-            width={40}
-            height={40}
-            className="relative z-10 dark:hidden"
-          />
-          <img
-            alt="vidrune logo"
-            src="/logo-dark.png"
-            width={40}
-            height={40}
-            className="relative z-10 hidden dark:block"
-          />
+          <Link to="/">
+            <img
+              alt="vidrune logo"
+              src="/logo-light.png"
+              width={40}
+              height={40}
+              className="relative z-10 dark:hidden"
+            />
+            <img
+              alt="vidrune logo"
+              src="/logo-dark.png"
+              width={40}
+              height={40}
+              className="relative z-10 hidden dark:block"
+            />
+          </Link>
           <div className="ml-auto flex items-center space-x-4">
             <ThemeSwitcher />
             <ConnectButton />
@@ -607,7 +657,7 @@ function ConsoleComponent() {
                             <p className="text-3xl md:text-4xl font-outfit font-bold">
                               {pipelineState.currentStage === "generating-audio"
                                 ? pipelineState.allScenes.filter(
-                                    (s) => s.caption && !s.audioUrl,
+                                    (s) => s.caption && !s.audioUrl
                                   ).length
                                 : 0}
                             </p>
@@ -623,22 +673,21 @@ function ConsoleComponent() {
                               <div className="group relative">
                                 <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
                                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-popover text-popover-foreground text-xs rounded-md shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
-                                  Points earned from successful video uploads (1 ROHR token
-                                  each)
+                                  Points earned from indexing videos on the network
                                 </div>
                               </div>
                             </div>
                             <div className="flex flex-col">
                               <p className="text-3xl md:text-4xl font-outfit font-bold text-[#34C759]">
-                                {completedIndexes}
-                              </p>
-                              <p className="text-xs text-muted-foreground text-end">
-                                {scenesProcessed} scenes processed
+                                {userPoints !== undefined ? Number(userPoints) : 0}
                               </p>
                             </div>
                           </div>
                         </Card>
                       </div>
+
+                      {/* Processing Ticker - Real-time video processing status */}
+                      <ProcessingTicker />
 
                       {/* Model Status Cards with Progress */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
@@ -702,7 +751,7 @@ function ConsoleComponent() {
                                                     .progress || 0) /
                                                     pipelineState.modelProgress.florence2
                                                       .total) *
-                                                    100,
+                                                    100
                                                 )}
                                                 %
                                               </span>
@@ -788,7 +837,7 @@ function ConsoleComponent() {
                                                     .progress || 0) /
                                                     pipelineState.modelProgress.kokoro
                                                       .total) *
-                                                    100,
+                                                    100
                                                 )}
                                                 %
                                               </span>
@@ -1066,7 +1115,7 @@ function ConsoleComponent() {
                                     isProcessing ||
                                     pipelineState.currentStage !== "complete" ||
                                     pipelineState.allScenes.some(
-                                      (s) => !s.caption || !s.audioUrl,
+                                      (s) => !s.caption || !s.audioUrl
                                     )
                                   }
                                   className="w-full px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
@@ -1105,7 +1154,7 @@ function ConsoleComponent() {
                                         ...metadata,
                                         title: videoMetadata.title,
                                         description: videoMetadata.description,
-                                        uploadedBy: zkLoginAccount?.address || "anonymous",
+                                        uploadedBy: address || "anonymous",
                                         uploadTime: Date.now(),
                                       };
 
@@ -1138,17 +1187,28 @@ function ConsoleComponent() {
                                       const url = URL.createObjectURL(zipBlob);
                                       const link = document.createElement("a");
                                       link.href = url;
-                                      link.download = `${videoMetadata.title.replace(/[^a-z0-9]/gi, "-")}-index.zip`;
+                                      link.download = `${videoMetadata.title.replace(
+                                        /[^a-z0-9]/gi,
+                                        "-"
+                                      )}-index.zip`;
                                       link.click();
                                       URL.revokeObjectURL(url);
 
                                       toast.success(
-                                        `Test ZIP created! Size: ${(zipBlob.size / 1024 / 1024).toFixed(2)} MB`
+                                        `Test ZIP created! Size: ${(
+                                          zipBlob.size /
+                                          1024 /
+                                          1024
+                                        ).toFixed(2)} MB`
                                       );
                                     } catch (error) {
                                       console.error("Test ZIP error:", error);
                                       toast.error(
-                                        `Failed to create test ZIP: ${error instanceof Error ? error.message : "Unknown error"}`
+                                        `Failed to create test ZIP: ${
+                                          error instanceof Error
+                                            ? error.message
+                                            : "Unknown error"
+                                        }`
                                       );
                                     }
                                   }}
@@ -1170,7 +1230,13 @@ function ConsoleComponent() {
                                 <p className="text-sm text-muted-foreground text-center">
                                   {pipelineState.currentStage === "complete"
                                     ? `${pipelineState.allScenes.length} scenes with captions and audio - ready to index`
-                                    : `Processing: ${pipelineState.allScenes.filter((s) => s.caption).length}/${pipelineState.allScenes.length} captions, ${pipelineState.allScenes.filter((s) => s.audioUrl).length}/${pipelineState.allScenes.length} audio`}
+                                    : `Processing: ${
+                                        pipelineState.allScenes.filter((s) => s.caption)
+                                          .length
+                                      }/${pipelineState.allScenes.length} captions, ${
+                                        pipelineState.allScenes.filter((s) => s.audioUrl)
+                                          .length
+                                      }/${pipelineState.allScenes.length} audio`}
                                 </p>
                               </div>
                             )}
@@ -1216,12 +1282,12 @@ function ConsoleComponent() {
                               >
                                 {pipelineState.error
                                   ? "Pipeline Error"
-                                  : "🧪 Test Mode Active"}
+                                  : "Test Mode Active"}
                               </p>
                             </div>
 
                             <p className="text-sm text-blue-600 dark:text-blue-300 mt-1">
-                              Videos will be processed locally.
+                              Video is being indexed locally.
                             </p>
 
                             <div className="space-y-4 pt-6">
@@ -1310,7 +1376,7 @@ function ConsoleComponent() {
                                               <span className="text-muted-foreground">
                                                 •{" "}
                                                 {(selectedVideo.size / 1024 / 1024).toFixed(
-                                                  1,
+                                                  1
                                                 )}
                                                 MB
                                               </span>
@@ -1322,13 +1388,13 @@ function ConsoleComponent() {
                                             <div
                                               className={`w-2 h-2 rounded-full ${
                                                 pipelineState.allScenes.filter(
-                                                  (s) => s.processed,
+                                                  (s) => s.processed
                                                 ).length > 0
                                                   ? "bg-green-500"
                                                   : pipelineState.currentStage ===
-                                                      "capturing"
-                                                    ? "bg-yellow-500"
-                                                    : "bg-gray-400"
+                                                    "capturing"
+                                                  ? "bg-yellow-500"
+                                                  : "bg-gray-400"
                                               }`}
                                             />
                                             <span className="font-medium">
@@ -1336,18 +1402,18 @@ function ConsoleComponent() {
                                             </span>
                                             <span className="text-muted-foreground">
                                               {pipelineState.allScenes.filter(
-                                                (s) => s.processed,
+                                                (s) => s.processed
                                               ).length > 0
                                                 ? "✅ Active"
                                                 : pipelineState.currentStage === "capturing"
-                                                  ? "⏳ Processing"
-                                                  : "⏸️ Idle"}
+                                                ? "⏳ Processing"
+                                                : "⏸️ Idle"}
                                             </span>
                                             <span className="text-muted-foreground">
                                               •{" "}
                                               {
                                                 pipelineState.allScenes.filter(
-                                                  (s) => s.processed,
+                                                  (s) => s.processed
                                                 ).length
                                               }{" "}
                                               scenes extracted
@@ -1359,13 +1425,13 @@ function ConsoleComponent() {
                                             <div
                                               className={`w-2 h-2 rounded-full ${
                                                 pipelineState.allScenes.filter(
-                                                  (s) => s.caption,
+                                                  (s) => s.caption
                                                 ).length > 0
                                                   ? "bg-green-500"
                                                   : pipelineState.currentStage ===
-                                                      "captioning"
-                                                    ? "bg-yellow-500"
-                                                    : "bg-gray-400"
+                                                    "captioning"
+                                                  ? "bg-yellow-500"
+                                                  : "bg-gray-400"
                                               }`}
                                             />
                                             <span className="font-medium">
@@ -1373,19 +1439,19 @@ function ConsoleComponent() {
                                             </span>
                                             <span className="text-muted-foreground">
                                               {pipelineState.allScenes.filter(
-                                                (s) => s.caption,
+                                                (s) => s.caption
                                               ).length > 0
                                                 ? "✅ Active"
                                                 : pipelineState.currentStage ===
-                                                    "captioning"
-                                                  ? "⏳ Processing"
-                                                  : "⏸️ Idle"}
+                                                  "captioning"
+                                                ? "⏳ Processing"
+                                                : "⏸️ Idle"}
                                             </span>
                                             <span className="text-muted-foreground">
                                               •{" "}
                                               {
                                                 pipelineState.allScenes.filter(
-                                                  (s) => s.caption,
+                                                  (s) => s.caption
                                                 ).length
                                               }{" "}
                                               captions generated
@@ -1397,31 +1463,31 @@ function ConsoleComponent() {
                                             <div
                                               className={`w-2 h-2 rounded-full ${
                                                 pipelineState.allScenes.filter(
-                                                  (s) => s.audioUrl,
+                                                  (s) => s.audioUrl
                                                 ).length > 0
                                                   ? "bg-green-500"
                                                   : pipelineState.currentStage ===
-                                                      "generating-audio"
-                                                    ? "bg-yellow-500"
-                                                    : "bg-gray-400"
+                                                    "generating-audio"
+                                                  ? "bg-yellow-500"
+                                                  : "bg-gray-400"
                                               }`}
                                             />
                                             <span className="font-medium">Kokoro TTS</span>
                                             <span className="text-muted-foreground">
                                               {pipelineState.allScenes.filter(
-                                                (s) => s.audioUrl,
+                                                (s) => s.audioUrl
                                               ).length > 0
                                                 ? "✅ Active"
                                                 : pipelineState.currentStage ===
-                                                    "generating-audio"
-                                                  ? "⏳ Processing"
-                                                  : "⏸️ Idle"}
+                                                  "generating-audio"
+                                                ? "⏳ Processing"
+                                                : "⏸️ Idle"}
                                             </span>
                                             <span className="text-muted-foreground">
                                               •{" "}
                                               {
                                                 pipelineState.allScenes.filter(
-                                                  (s) => s.audioUrl,
+                                                  (s) => s.audioUrl
                                                 ).length
                                               }{" "}
                                               audio files generated
@@ -1471,7 +1537,7 @@ function ConsoleComponent() {
                                                   ? Math.round(
                                                       (100 -
                                                         pipelineState.progress.percentage) *
-                                                        0.5,
+                                                        0.5
                                                     ) + "s"
                                                   : "N/A"}
                                               </span>
@@ -1510,7 +1576,7 @@ function ConsoleComponent() {
                                                         .progress /
                                                         pipelineState.modelProgress
                                                           .florence2.total) *
-                                                        100,
+                                                        100
                                                     )}
                                                     %
                                                   </span>
@@ -1541,7 +1607,7 @@ function ConsoleComponent() {
                                                         .progress /
                                                         pipelineState.modelProgress.kokoro
                                                           .total) *
-                                                        100,
+                                                        100
                                                     )}
                                                     %
                                                   </span>
@@ -1563,17 +1629,21 @@ function ConsoleComponent() {
                                                   onClick={() => {
                                                     const scenes =
                                                       pipelineState.allScenes.filter(
-                                                        (s) => s.processed && s.imageUrl,
+                                                        (s) => s.processed && s.imageUrl
                                                       );
                                                     scenes.forEach((scene, index) => {
                                                       const link =
                                                         document.createElement("a");
                                                       link.href = scene.imageUrl;
-                                                      link.download = `scene-${index + 1}-${scene.timestamp?.toFixed(1)}s.png`;
+                                                      link.download = `scene-${
+                                                        index + 1
+                                                      }-${scene.timestamp?.toFixed(
+                                                        1
+                                                      )}s.png`;
                                                       link.click();
                                                     });
                                                     toast.success(
-                                                      `Saving ${scenes.length} scene images...`,
+                                                      `Saving ${scenes.length} scene images...`
                                                     );
                                                   }}
                                                   className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
@@ -1596,7 +1666,7 @@ function ConsoleComponent() {
                                                           onClick={() =>
                                                             handleImageClick(
                                                               scene.imageUrl,
-                                                              index,
+                                                              index
                                                             )
                                                           }
                                                         >
@@ -1605,7 +1675,7 @@ function ConsoleComponent() {
                                                             alt={`Scene ${
                                                               index + 1
                                                             } at ${scene.timestamp?.toFixed(
-                                                              1,
+                                                              1
                                                             )}s`}
                                                             width={120}
                                                             height={80}
@@ -1628,7 +1698,7 @@ function ConsoleComponent() {
                                                             {scene.caption
                                                               ? `"${scene.caption.substring(
                                                                   0,
-                                                                  30,
+                                                                  30
                                                                 )}..."`
                                                               : "Processing..."}
                                                           </div>
@@ -1641,7 +1711,7 @@ function ConsoleComponent() {
                                                             link.download = `scene-${
                                                               index + 1
                                                             }-${scene.timestamp?.toFixed(
-                                                              1,
+                                                              1
                                                             )}s.png`;
                                                             link.click();
                                                           }}
@@ -1700,13 +1770,13 @@ function ConsoleComponent() {
                                                   onClick={() => {
                                                     const audioScenes =
                                                       pipelineState.allScenes.filter(
-                                                        (s) => s.audioUrl,
+                                                        (s) => s.audioUrl
                                                       );
                                                     audioScenes.forEach(
                                                       async (scene, index) => {
                                                         try {
                                                           const response = await fetch(
-                                                            scene.audioUrl!,
+                                                            scene.audioUrl!
                                                           );
                                                           const blob =
                                                             await response.blob();
@@ -1715,19 +1785,23 @@ function ConsoleComponent() {
                                                           const link =
                                                             document.createElement("a");
                                                           link.href = url;
-                                                          link.download = `audio-${index + 1}-${scene.timestamp?.toFixed(1)}s.wav`;
+                                                          link.download = `audio-${
+                                                            index + 1
+                                                          }-${scene.timestamp?.toFixed(
+                                                            1
+                                                          )}s.wav`;
                                                           link.click();
                                                           URL.revokeObjectURL(url);
                                                         } catch (error) {
                                                           console.error(
                                                             "Failed to download audio:",
-                                                            error,
+                                                            error
                                                           );
                                                         }
-                                                      },
+                                                      }
                                                     );
                                                     toast.success(
-                                                      `Saving ${audioScenes.length} audio files...`,
+                                                      `Saving ${audioScenes.length} audio files...`
                                                     );
                                                   }}
                                                   className="text-xs text-purple-600 hover:text-purple-700 flex items-center gap-1"
@@ -1769,7 +1843,7 @@ function ConsoleComponent() {
                                                           onClick={async () => {
                                                             try {
                                                               const response = await fetch(
-                                                                scene.audioUrl!,
+                                                                scene.audioUrl!
                                                               );
                                                               const blob =
                                                                 await response.blob();
@@ -1778,15 +1852,19 @@ function ConsoleComponent() {
                                                               const link =
                                                                 document.createElement("a");
                                                               link.href = url;
-                                                              link.download = `audio-${index + 1}-${scene.timestamp?.toFixed(1)}s.wav`;
+                                                              link.download = `audio-${
+                                                                index + 1
+                                                              }-${scene.timestamp?.toFixed(
+                                                                1
+                                                              )}s.wav`;
                                                               link.click();
                                                               URL.revokeObjectURL(url);
                                                               toast.success(
-                                                                "Audio file saved!",
+                                                                "Audio file saved!"
                                                               );
                                                             } catch (error) {
                                                               toast.error(
-                                                                "Failed to save audio",
+                                                                "Failed to save audio"
                                                               );
                                                             }
                                                           }}
@@ -1958,7 +2036,7 @@ function ConsoleComponent() {
                             Caption: "
                             {
                               pipelineState.allScenes.filter(
-                                (s) => s.processed && s.imageUrl,
+                                (s) => s.processed && s.imageUrl
                               )[selectedImageIndex]?.caption
                             }
                             "
@@ -1968,7 +2046,7 @@ function ConsoleComponent() {
                       <button
                         onClick={() => {
                           const scene = pipelineState.allScenes.filter(
-                            (s) => s.processed && s.imageUrl,
+                            (s) => s.processed && s.imageUrl
                           )[selectedImageIndex];
                           if (scene) {
                             const link = document.createElement("a");
