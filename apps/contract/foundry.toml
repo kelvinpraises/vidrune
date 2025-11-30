@@ -1,0 +1,28 @@
+[profile.default]
+src = "src"
+out = "out"
+script = "script"
+test = "test"
+libs = ["lib"]
+solc = "0.8.24"
+optimizer = true
+optimizer_runs = 200
+via_ir = false
+evm_version = "shanghai"
+fs_permissions = [{ access = "read", path = "./"}]
+ignored_error_codes = [5574]
+
+[fmt]
+line_length = 120
+tab_width = 4
+bracket_spacing = true
+int_types = "long"
+multiline_func_header = "attributes_first"
+quote_style = "double"
+number_underscore = "thousands"
+
+[rpc_endpoints]
+somnia = "${RPC_SOMNIA}"
+
+# [etherscan]
+# somnia = { key = "${SOMNIA_EXPLORER_API_KEY}", url = "https://shannon-explorer.somnia.network/api" }
