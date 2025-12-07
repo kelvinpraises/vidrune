@@ -42,7 +42,14 @@ async function createMarketForVideo(videoId: string): Promise<number> {
     
     const { contractsService, geminiService, walrusService } = getServices();
 
-    // 1. Get convictions for this video
+    // 1. Check if markets already exist for this video ON-CHAIN (persistent check)
+    const existingMarkets = await contractsService.getMarketsForVideo(videoId);
+    if (existingMarkets.length > 0) {
+      console.log(`Markets already exist for video ${videoId} (${existingMarkets.length} found), skipping...`);
+      return 0;
+    }
+
+    // 2. Get convictions for this video
     const contractConvictions = await contractsService.getConvictions(videoId);
 
     if (contractConvictions.length === 0) {
@@ -50,17 +57,15 @@ async function createMarketForVideo(videoId: string): Promise<number> {
       return 0;
     }
 
-    // Create a unique throttle key based on conviction count
-    // This ensures we re-process if new convictions arrive
-    const throttleKey = `market-create-${videoId}-count-${contractConvictions.length}`;
-    
-    // Check if we've already processed this exact set of convictions
+    // In-memory throttle to reduce redundant RPC calls during normal operation
+    // This is a secondary check - the on-chain check above is the source of truth
+    const throttleKey = `market-create-${videoId}`;
     if (throttleService.wasRecentlyProcessed(throttleKey, 3600000)) {
-      console.log(`Already processed ${contractConvictions.length} convictions for video ${videoId}, skipping...`);
+      console.log(`Recently attempted market creation for video ${videoId}, skipping...`);
       return 0;
     }
 
-    // Mark as processing to prevent duplicate work
+    // Mark as processing to prevent duplicate work within this session
     throttleService.markProcessed(throttleKey);
 
     // 2. Download conviction data from Walrus and build Conviction objects

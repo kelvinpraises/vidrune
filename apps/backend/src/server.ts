@@ -82,8 +82,27 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
   });
 });
 
+// Auto-register SDS schema on startup
+import { getStreamsService } from "./services/streams";
+
+const initializeServices = async () => {
+  try {
+    const streamsService = getStreamsService();
+    const status = streamsService.getConnectionStatus();
+    
+    if (status.connected) {
+      console.log('🔧 Auto-registering SDS schema...');
+      await streamsService.registerEventSchema();
+    } else {
+      console.log('⚠️  SDS not configured - skipping schema registration');
+    }
+  } catch (error) {
+    console.error('Failed to initialize services:', error);
+  }
+};
+
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`
 ╔══════════════════════════════════════════════╗
 ║         Vidrune Backend Server               ║
@@ -97,6 +116,9 @@ app.listen(PORT, () => {
 📡 Polling Mode: Frontend-triggered (serverless compatible)
    The frontend acts as a cron agent, calling /api/poll-updates
   `);
+
+  // Initialize services after server starts
+  await initializeServices();
 });
 
 // Graceful shutdown

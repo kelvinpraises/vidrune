@@ -422,6 +422,60 @@ export class ContractsService {
     }
   }
 
+  /**
+   * Get all markets for a specific video
+   * Used to check if markets already exist before creating new ones
+   */
+  async getMarketsForVideo(videoId: string): Promise<Market[]> {
+    this.ensureConfigured();
+    try {
+      // Get all market IDs
+      const marketIds = (await (this.publicClient as any).readContract({
+        address: this.predictionMarketAddress,
+        abi: predictionMarketAbi,
+        functionName: "getAllMarketIds",
+      })) as string[];
+
+      const markets: Market[] = [];
+
+      // Fetch each market and filter by videoId
+      for (const marketId of marketIds) {
+        try {
+          const market = (await (this.publicClient as any).readContract({
+            address: this.predictionMarketAddress,
+            abi: predictionMarketAbi,
+            functionName: "getMarket",
+            args: [marketId],
+          })) as any;
+
+          if (market.videoId === videoId) {
+            markets.push({
+              id: market.id,
+              videoId: market.videoId,
+              question: market.question,
+              creator: market.creator,
+              createdAt: market.createdAt,
+              expiresAt: market.expiresAt,
+              yesVotes: market.yesVotes,
+              noVotes: market.noVotes,
+              resolved: market.resolved,
+              winningSide: market.winningSide,
+              status: market.status,
+            });
+          }
+        } catch (error) {
+          // Skip invalid markets
+          console.warn(`Failed to fetch market ${marketId}:`, error);
+        }
+      }
+
+      return markets;
+    } catch (error) {
+      console.error(`Failed to get markets for video ${videoId}:`, error);
+      throw error;
+    }
+  }
+
   // ========== WRITE METHODS ==========
 
   /**

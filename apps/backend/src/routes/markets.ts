@@ -178,6 +178,91 @@ router.post('/create', async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/video/submit
+ * Submit a video index to blockchain and emit SDS event
+ */
+router.post('/video/submit', async (req: Request, res: Response) => {
+  try {
+    const { videoId, walrusBlobId, userId, title } = req.body;
+
+    if (!videoId || !walrusBlobId || !userId) {
+      res.status(400).json({
+        error: 'Invalid Request',
+        message: 'videoId, walrusBlobId, and userId are required'
+      });
+      return;
+    }
+
+    const contractsService = getContractsService();
+
+    // Submit to blockchain
+    const txHash = await contractsService.submitVideo(videoId, walrusBlobId);
+
+    // Emit SDS event
+    await streamsService.emitVideoIndexed({
+      videoId,
+      userId,
+      title: title || 'Untitled Video'
+    });
+
+    res.status(201).json({
+      success: true,
+      txHash,
+      message: 'Video submitted successfully'
+    });
+  } catch (error) {
+    console.error('Video submission error:', error);
+    res.status(500).json({
+      error: 'Video Submission Failed',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * POST /api/video/conviction
+ * Submit a conviction against a video and emit SDS event
+ */
+router.post('/video/conviction', async (req: Request, res: Response) => {
+  try {
+    const { videoId, proofBlobId, userId, fact } = req.body;
+
+    if (!videoId || !proofBlobId || !userId) {
+      res.status(400).json({
+        error: 'Invalid Request',
+        message: 'videoId, proofBlobId, and userId are required'
+      });
+      return;
+    }
+
+    const contractsService = getContractsService();
+
+    // Submit conviction to blockchain
+    const txHash = await contractsService.submitConviction(videoId, proofBlobId);
+
+    // Emit SDS event
+    await streamsService.emitConvictionSubmitted({
+      convictionId: txHash,
+      videoId,
+      userId,
+      fact: fact || 'Conviction submitted'
+    });
+
+    res.status(201).json({
+      success: true,
+      txHash,
+      message: 'Conviction submitted successfully'
+    });
+  } catch (error) {
+    console.error('Conviction submission error:', error);
+    res.status(500).json({
+      error: 'Conviction Submission Failed',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
  * POST /api/markets/:marketId/vote
  * Submit a vote on a prediction market
  */
