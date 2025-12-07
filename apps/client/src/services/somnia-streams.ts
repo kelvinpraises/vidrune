@@ -2,15 +2,11 @@
  * Somnia Data Streams Integration
  *
  * Real-time event streaming for Vidrune platform using Somnia Data Streams (SDS).
- * Provides publish/subscribe functionality for platform events.
- *
- * NOTE: This is a simplified implementation for hackathon demo purposes.
- * For production, integrate with actual Somnia Data Streams SDK methods.
+ * Subscribes to events emitted by the backend.
  */
 
-// Uncomment for full SDS integration:
-// import { SDK as SomniaDataStreams } from '@somnia-chain/streams';
-// import { createPublicClient, webSocket } from 'viem';
+import { SDK } from '@somnia-chain/streams';
+import { createPublicClient, http } from 'viem';
 
 // ============================================================================
 // Event Types & Schemas
@@ -116,38 +112,47 @@ export interface ProcessingStatus {
 }
 
 // ============================================================================
-// SDS Service Instance (Simplified for Demo)
+// SDS Service Instance
 // ============================================================================
 
-// Event Bus for simplified real-time demo
-type EventHandler = (event: ActivityEvent) => void;
-const eventHandlers: Map<string, EventHandler[]> = new Map();
+const somniaTestnet = {
+  id: 50312,
+  name: 'Somnia Testnet',
+  nativeCurrency: {
+    name: 'STT',
+    symbol: 'STT',
+    decimals: 18
+  },
+  rpcUrls: {
+    default: {
+      http: ['https://dream-rpc.somnia.network']
+    }
+  }
+} as const;
 
+let sdsInstance: SDK | null = null;
 let isInitialized = false;
 
 /**
  * Initialize Somnia Data Streams SDK
- *
- * For hackathon demo, we use an in-memory event bus.
- * For production, replace with actual SDS SDK initialization:
- *
- * const publicClient = createPublicClient({
- *   chain: { id: 50312, ... },
- *   transport: webSocket('wss://dream-rpc.somnia.network')
- * });
- * sdsInstance = new SomniaDataStreams({ public: publicClient });
  */
 export const initializeSDS = async () => {
-  if (isInitialized) {
+  if (isInitialized && sdsInstance) {
     return true;
   }
 
   try {
-    // For demo: Just mark as initialized
+    const publicClient = createPublicClient({
+      chain: somniaTestnet,
+      transport: http('https://dream-rpc.somnia.network')
+    });
+
+    sdsInstance = new SDK({
+      public: publicClient as any
+    });
+
     isInitialized = true;
-    console.log('Somnia Data Streams initialized (demo mode)');
-    console.log('ℹ️ Using in-memory event bus for hackathon demo');
-    console.log('ℹ️ For production, integrate with actual SDS SDK');
+    console.log('✅ Somnia Data Streams initialized');
     return true;
   } catch (error) {
     console.error('Failed to initialize Somnia Data Streams:', error);
@@ -156,243 +161,175 @@ export const initializeSDS = async () => {
 };
 
 // ============================================================================
-// Publish Methods (Emit Events)
+// Event Parsing Helper
 // ============================================================================
 
 /**
- * Emit a video indexed event
+ * Parse SDS event data into typed event
  */
-export const emitVideoIndexed = async (videoId: string, uploader: string) => {
+const parseSDSEvent = (rawEvent: any): ActivityEvent | null => {
   try {
-    await initializeSDS();
+    const eventType = rawEvent.eventType;
+    const data = typeof rawEvent.data === 'string' ? JSON.parse(rawEvent.data) : rawEvent.data;
+    const timestamp = Number(rawEvent.timestamp);
 
-    const event: VideoIndexedEvent = {
-      eventType: 'VIDEO_INDEXED',
-      videoId,
-      uploader,
-      timestamp: Date.now(),
-    };
-
-    // Emit to all subscribers on the activity channel
-    emitToChannel('vidrune:activity', event);
-    console.log('Video indexed event emitted:', event);
-  } catch (error) {
-    console.error('Failed to emit video indexed event:', error);
-  }
-};
-
-/**
- * Emit a conviction submitted event
- */
-export const emitConvictionSubmitted = async (
-  videoId: string,
-  convictionId: string,
-  challenger: string
-) => {
-  try {
-    await initializeSDS();
-
-    const event: ConvictionSubmittedEvent = {
-      eventType: 'CONVICTION_SUBMITTED',
-      videoId,
-      convictionId,
-      challenger,
-      timestamp: Date.now(),
-    };
-
-    emitToChannel('vidrune:activity', event);
-    console.log('Conviction submitted event emitted:', event);
-  } catch (error) {
-    console.error('Failed to emit conviction submitted event:', error);
-  }
-};
-
-/**
- * Emit a market created event
- */
-export const emitMarketCreated = async (
-  marketId: string,
-  videoId: string,
-  question: string
-) => {
-  try {
-    await initializeSDS();
-
-    const event: MarketCreatedEvent = {
-      eventType: 'MARKET_CREATED',
-      marketId,
-      videoId,
-      question,
-      timestamp: Date.now(),
-    };
-
-    emitToChannel('vidrune:activity', event);
-    console.log('Market created event emitted:', event);
-  } catch (error) {
-    console.error('Failed to emit market created event:', error);
-  }
-};
-
-/**
- * Emit a market vote event
- */
-export const emitMarketVote = async (
-  marketId: string,
-  isYes: boolean,
-  voter: string,
-  yesCount: number,
-  noCount: number
-) => {
-  try {
-    await initializeSDS();
-
-    const event: MarketVoteEvent = {
-      eventType: 'MARKET_VOTE',
-      marketId,
-      isYes,
-      voter,
-      yesCount,
-      noCount,
-      timestamp: Date.now(),
-    };
-
-    // Publish to both activity feed and market-specific channel
-    emitToChannel('vidrune:activity', event);
-    emitToChannel(`vidrune:market:${marketId}`, event);
-
-    console.log('Market vote event emitted:', event);
-  } catch (error) {
-    console.error('Failed to emit market vote event:', error);
-  }
-};
-
-/**
- * Emit a market resolved event
- */
-export const emitMarketResolved = async (marketId: string, winningSide: boolean) => {
-  try {
-    await initializeSDS();
-
-    const event: MarketResolvedEvent = {
-      eventType: 'MARKET_RESOLVED',
-      marketId,
-      winningSide,
-      timestamp: Date.now(),
-    };
-
-    emitToChannel('vidrune:activity', event);
-    console.log('Market resolved event emitted:', event);
-  } catch (error) {
-    console.error('Failed to emit market resolved event:', error);
-  }
-};
-
-/**
- * Emit a processing update event
- */
-export const emitProcessingUpdate = async (
-  videoId: string,
-  stage: string,
-  progress: number
-) => {
-  try {
-    await initializeSDS();
-
-    const event: ProcessingUpdateEvent = {
-      eventType: 'PROCESSING_UPDATE',
-      videoId,
-      stage,
-      progress,
-      timestamp: Date.now(),
-    };
-
-    emitToChannel('vidrune:processing', event);
-    console.log('Processing update event emitted:', event);
-  } catch (error) {
-    console.error('Failed to emit processing update event:', error);
-  }
-};
-
-/**
- * Emit a points awarded event
- */
-export const emitPointsAwarded = async (
-  user: string,
-  amount: number,
-  reason: string,
-  newTotal: number
-) => {
-  try {
-    await initializeSDS();
-
-    const event: PointsAwardedEvent = {
-      eventType: 'POINTS_AWARDED',
-      user,
-      amount,
-      reason,
-      newTotal,
-      timestamp: Date.now(),
-    };
-
-    emitToChannel('vidrune:activity', event);
-    console.log('Points awarded event emitted:', event);
-  } catch (error) {
-    console.error('Failed to emit points awarded event:', error);
-  }
-};
-
-// ============================================================================
-// Internal Event Bus (Demo Implementation)
-// ============================================================================
-
-/**
- * Emit event to channel (in-memory for demo)
- */
-const emitToChannel = (channel: string, event: ActivityEvent | MarketVoteEvent | ProcessingUpdateEvent) => {
-  const handlers = eventHandlers.get(channel) || [];
-  handlers.forEach(handler => {
-    try {
-      handler(event as ActivityEvent);
-    } catch (error) {
-      console.error(`Error in event handler for channel ${channel}:`, error);
+    switch (eventType) {
+      case 'video-indexed':
+        return {
+          eventType: 'VIDEO_INDEXED',
+          videoId: data.videoId,
+          uploader: data.userId,
+          timestamp
+        };
+      case 'conviction-submitted':
+        return {
+          eventType: 'CONVICTION_SUBMITTED',
+          videoId: data.videoId,
+          convictionId: data.convictionId,
+          challenger: data.userId,
+          timestamp
+        };
+      case 'market-created':
+        return {
+          eventType: 'MARKET_CREATED',
+          marketId: data.marketId,
+          videoId: data.videoId,
+          question: data.question,
+          timestamp
+        };
+      case 'market-vote':
+        return {
+          eventType: 'MARKET_VOTE',
+          marketId: data.marketId,
+          isYes: data.isYes,
+          voter: data.userId,
+          yesCount: 0, // Will be fetched from contract
+          noCount: 0,
+          timestamp
+        };
+      case 'market-resolved':
+        return {
+          eventType: 'MARKET_RESOLVED',
+          marketId: data.marketId,
+          winningSide: data.winningSide,
+          timestamp
+        };
+      case 'processing-update':
+        return {
+          eventType: 'PROCESSING_UPDATE',
+          videoId: data.videoId,
+          stage: data.stage,
+          progress: data.progress,
+          timestamp
+        };
+      case 'points-awarded':
+        return {
+          eventType: 'POINTS_AWARDED',
+          user: data.userId,
+          amount: data.amount,
+          reason: data.reason,
+          newTotal: 0, // Will be fetched from contract
+          timestamp
+        };
+      default:
+        console.warn('Unknown event type:', eventType);
+        return null;
     }
-  });
-};
-
-/**
- * Subscribe to channel
- */
-const subscribeToChannel = (channel: string, callback: EventHandler) => {
-  const handlers = eventHandlers.get(channel) || [];
-  handlers.push(callback);
-  eventHandlers.set(channel, handlers);
-
-  console.log(`Subscribed to channel: ${channel}`);
-
-  // Return unsubscribe function
-  return () => {
-    const currentHandlers = eventHandlers.get(channel) || [];
-    const index = currentHandlers.indexOf(callback);
-    if (index > -1) {
-      currentHandlers.splice(index, 1);
-      eventHandlers.set(channel, currentHandlers);
-      console.log(`Unsubscribed from channel: ${channel}`);
-    }
-  };
+  } catch (error) {
+    console.error('Failed to parse SDS event:', error);
+    return null;
+  }
 };
 
 // ============================================================================
-// Subscribe Methods (Listen for Events)
+// Subscribe Methods (Listen for Events from Backend)
 // ============================================================================
 
 /**
- * Subscribe to all platform activity events
+ * Subscribe to all platform activity events from SDS
+ * Uses polling to fetch events from the backend publisher
  */
 export const subscribeToActivity = (callback: (event: ActivityEvent) => void) => {
   const setupSubscription = async () => {
     try {
       await initializeSDS();
-      return subscribeToChannel('vidrune:activity', callback);
+      
+      if (!sdsInstance) {
+        console.error('SDS not initialized');
+        return () => {};
+      }
+
+      console.log('🔌 Starting SDS event polling...');
+
+      // Get backend wallet address from env
+      const backendPublisher = import.meta.env.VITE_BACKEND_PUBLISHER_ADDRESS;
+      if (!backendPublisher) {
+        console.error('VITE_BACKEND_PUBLISHER_ADDRESS not set in .env');
+        return () => {};
+      }
+
+      // Compute schema ID for vidrune-events
+      const eventSchema = 'string eventType,uint256 timestamp,string data';
+      const schemaIdResult = await sdsInstance.streams.computeSchemaId(eventSchema);
+      
+      if (schemaIdResult instanceof Error) {
+        throw schemaIdResult;
+      }
+
+      const schemaId = schemaIdResult;
+      console.log('📋 Schema ID:', schemaId);
+
+      const seenEvents = new Set<string>();
+
+      // Poll for new events every 3 seconds
+      const intervalId = setInterval(async () => {
+        try {
+          const allDataResult = await sdsInstance!.streams.getAllPublisherDataForSchema(
+            schemaId,
+            backendPublisher as `0x${string}`
+          );
+
+          if (allDataResult instanceof Error) {
+            throw allDataResult;
+          }
+
+          const allData = Array.isArray(allDataResult) ? allDataResult : [];
+
+          for (const dataItem of allData) {
+            const fields = Array.isArray(dataItem) ? dataItem : [];
+            let eventType = '';
+            let timestamp = 0;
+            let data = '';
+
+            for (const field of fields) {
+              const val = field.value?.value ?? field.value;
+              if (field.name === 'eventType') eventType = String(val);
+              if (field.name === 'timestamp') timestamp = Number(val);
+              if (field.name === 'data') data = String(val);
+            }
+
+            const eventId = `${timestamp}-${eventType}`;
+            if (!seenEvents.has(eventId)) {
+              seenEvents.add(eventId);
+              
+              const event = parseSDSEvent({ eventType, timestamp, data });
+              if (event) {
+                console.log('📡 New SDS event:', event);
+                callback(event);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error polling SDS events:', error);
+        }
+      }, 3000);
+
+      console.log('✅ Subscribed to Vidrune activity feed (polling every 3s)');
+      
+      return () => {
+        clearInterval(intervalId);
+        console.log('Unsubscribed from activity feed');
+      };
     } catch (error) {
       console.error('Failed to subscribe to activity feed:', error);
       return () => {};
@@ -403,71 +340,48 @@ export const subscribeToActivity = (callback: (event: ActivityEvent) => void) =>
 };
 
 /**
- * Subscribe to market-specific vote events for live odds updates
+ * Subscribe to market-specific events
+ * Note: Currently all events come through the same schema, filtered client-side
  */
 export const subscribeToMarketOdds = (
   marketId: string,
   callback: (odds: MarketOdds) => void
 ) => {
-  const setupSubscription = async () => {
-    try {
-      await initializeSDS();
-
-      return subscribeToChannel(`vidrune:market:${marketId}`, (data: ActivityEvent) => {
-        if (data.eventType === 'MARKET_VOTE') {
-          const voteEvent = data as MarketVoteEvent;
-          const total = voteEvent.yesCount + voteEvent.noCount;
-          const odds: MarketOdds = {
-            marketId: voteEvent.marketId,
-            yesCount: voteEvent.yesCount,
-            noCount: voteEvent.noCount,
-            yesPercentage: total > 0 ? (voteEvent.yesCount / total) * 100 : 50,
-            noPercentage: total > 0 ? (voteEvent.noCount / total) * 100 : 50,
-            timestamp: voteEvent.timestamp,
-          };
-
-          console.log('Market odds updated:', odds);
-          callback(odds);
-        }
-      });
-    } catch (error) {
-      console.error('Failed to subscribe to market odds:', error);
-      return () => {};
+  return subscribeToActivity((event) => {
+    if (event.eventType === 'MARKET_VOTE') {
+      const voteEvent = event as MarketVoteEvent;
+      if (voteEvent.marketId === marketId) {
+        const total = voteEvent.yesCount + voteEvent.noCount;
+        const odds: MarketOdds = {
+          marketId: voteEvent.marketId,
+          yesCount: voteEvent.yesCount,
+          noCount: voteEvent.noCount,
+          yesPercentage: total > 0 ? (voteEvent.yesCount / total) * 100 : 50,
+          noPercentage: total > 0 ? (voteEvent.noCount / total) * 100 : 50,
+          timestamp: voteEvent.timestamp,
+        };
+        callback(odds);
+      }
     }
-  };
-
-  return setupSubscription();
+  });
 };
 
 /**
  * Subscribe to video processing status updates
  */
 export const subscribeToProcessing = (callback: (status: ProcessingStatus) => void) => {
-  const setupSubscription = async () => {
-    try {
-      await initializeSDS();
-
-      return subscribeToChannel('vidrune:processing', (data: ActivityEvent) => {
-        if (data.eventType === 'PROCESSING_UPDATE') {
-          const processingEvent = data as ProcessingUpdateEvent;
-          const status: ProcessingStatus = {
-            videoId: processingEvent.videoId,
-            stage: processingEvent.stage,
-            progress: processingEvent.progress,
-            timestamp: processingEvent.timestamp,
-          };
-
-          console.log('Processing status updated:', status);
-          callback(status);
-        }
-      });
-    } catch (error) {
-      console.error('Failed to subscribe to processing updates:', error);
-      return () => {};
+  return subscribeToActivity((event) => {
+    if (event.eventType === 'PROCESSING_UPDATE') {
+      const processingEvent = event as ProcessingUpdateEvent;
+      const status: ProcessingStatus = {
+        videoId: processingEvent.videoId,
+        stage: processingEvent.stage,
+        progress: processingEvent.progress,
+        timestamp: processingEvent.timestamp,
+      };
+      callback(status);
     }
-  };
-
-  return setupSubscription();
+  });
 };
 
 // ============================================================================
