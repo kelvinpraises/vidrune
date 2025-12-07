@@ -153,7 +153,7 @@ export class StreamsService {
   }
 
   /**
-   * Emit a generic event with retry logic
+   * Emit a generic event with retry logic using Data Streams
    */
   private async emitEvent<T>(eventType: EventType, data: T): Promise<void> {
     // Don't fail if SDS is not available
@@ -166,38 +166,45 @@ export class StreamsService {
 
     for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
       try {
-        const eventData = {
-          eventType,
-          timestamp: Date.now(),
-          data
-        };
+        const timestamp = Math.floor(Date.now() / 1000);
 
         // Encode event data
         const encodedData = this.schemaEncoder.encodeData([
           { name: 'eventType', type: 'string', value: eventType },
-          { name: 'timestamp', type: 'uint256', value: eventData.timestamp },
+          { name: 'timestamp', type: 'uint256', value: BigInt(timestamp) },
           { name: 'data', type: 'string', value: JSON.stringify(data) }
         ]);
 
-        // Create event stream
-        const eventStreams = [{
-          id: this.eventSchemaId,
-          argumentTopics: [], // No indexed parameters for now
+        // Compute schema ID
+        const schemaIdResult = await this.sdk.streams.computeSchemaId(
+          'string eventType,uint256 timestamp,string data'
+        );
+
+        if (schemaIdResult instanceof Error) {
+          throw schemaIdResult;
+        }
+
+        // Create unique data ID for this event
+        const dataId = toHex(`${eventType}-${timestamp}-${Date.now()}`, { size: 32 });
+
+        // Publish to SDS using Data Streams
+        const dataStreams = [{
+          id: dataId,
+          schemaId: schemaIdResult,
           data: encodedData
         }];
 
-        // Emit to SDS
-        const result = await this.sdk.streams.emitEvents(eventStreams);
+        const result = await this.sdk.streams.set(dataStreams);
 
         if (result instanceof Error) {
           throw result;
         }
 
-        console.log(`[SDS] Event emitted: ${eventType} - tx: ${result}`);
+        console.log(`[SDS] Event published: ${eventType} - tx: ${result}`);
         return;
       } catch (error) {
         lastError = error as Error;
-        console.error(`SDS emit failed (attempt ${attempt}/${this.MAX_RETRIES}):`, error);
+        console.error(`SDS publish failed (attempt ${attempt}/${this.MAX_RETRIES}):`, error);
 
         if (attempt < this.MAX_RETRIES) {
           await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY * attempt));
@@ -260,39 +267,43 @@ export class StreamsService {
   }
 
   /**
-   * Register event schema (call once during initialization)
+   * Register data schema (call once during initialization)
    * This should be called when deploying the backend for the first time
    */
   async registerEventSchema(): Promise<void> {
     if (!this.sdk || !this.isConnected) {
-      console.warn('Cannot register event schema - SDK not connected');
+      console.warn('Cannot register data schema - SDK not connected');
       return;
     }
 
     try {
-      // Define event schema with event signature
-      const eventSchemas = [{
-        id: this.eventSchemaId,
-        schema: {
-          params: [
-            { name: 'eventType', paramType: 'string', isIndexed: false },
-            { name: 'timestamp', paramType: 'uint256', isIndexed: false },
-            { name: 'data', paramType: 'string', isIndexed: false }
-          ],
-          eventTopic: toHex('VidruneEvent(string,uint256,string)', { size: 32 })
-        }
-      }];
+      const { zeroBytes32 } = await import('@somnia-chain/streams');
+      const eventSchema = 'string eventType,uint256 timestamp,string data';
 
-      const result = await this.sdk.streams.registerEventSchemas(eventSchemas);
+      // Register as Data Schema (not Event Schema)
+      const ignoreAlreadyRegistered = true;
 
-      if (result instanceof Error) {
-        throw result;
+      const result = await this.sdk.streams.registerDataSchemas(
+        [{
+          schemaName: 'vidrune-events',
+          schema: eventSchema,
+          parentSchemaId: zeroBytes32 as `0x${string}`
+        }],
+        ignoreAlreadyRegistered
+      );
+
+      if (result) {
+        console.log(`✅ Data schema registered - tx: ${result}`);
+      } else {
+        console.log('ℹ️ Schema already registered — no action required');
       }
-
-      console.log(`Event schema registered successfully - tx: ${result}`);
-    } catch (error) {
-      console.error('Failed to register event schema:', error);
-      throw error;
+    } catch (error: any) {
+      if (String(error).includes('SchemaAlreadyRegistered')) {
+        console.log('⚠️ Schema already registered. Continuing...');
+      } else {
+        console.error('Failed to register data schema:', error);
+        throw error;
+      }
     }
   }
 
