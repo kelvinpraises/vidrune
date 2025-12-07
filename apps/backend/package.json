@@ -7,7 +7,8 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "gen": "tsx scripts/generate-abis.ts"
+    "gen": "tsx scripts/generate-abis.ts",
+    "register-sds-schema": "tsx scripts/register-sds-schema.ts"
   },
   "keywords": [
     "vidrune",

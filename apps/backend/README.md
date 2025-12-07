@@ -17,12 +17,20 @@ cp .env.example .env
 3. Configure environment variables:
    - `PORT`: Server port (default: 3001)
    - `SOMNIA_RPC_URL`: Somnia network RPC endpoint
+   - `BACKEND_WALLET_PRIVATE_KEY`: Private key for backend operations
    - `GEMINI_KEY_1` through `GEMINI_KEY_10`: Gemini API keys for rate limit distribution
    - `MEILISEARCH_HOST`: MeiliSearch server URL
    - `MEILISEARCH_API_KEY`: MeiliSearch API key
    - `WALRUS_PUBLISHER_URL`: Walrus publisher endpoint
    - `WALRUS_AGGREGATOR_URL`: Walrus aggregator endpoint
-   - `SDS_WEBSOCKET_URL`: Somnia Data Streams WebSocket URL
+   - `SDS_WEBSOCKET_URL`: (Optional) Somnia Data Streams WebSocket URL for subscriptions
+
+4. Register Somnia Data Streams schema (one-time setup):
+```bash
+npm run register-sds-schema
+```
+
+See [docs/SOMNIA_DATA_STREAMS.md](./docs/SOMNIA_DATA_STREAMS.md) for detailed SDS setup.
 
 ## Development
 
@@ -97,14 +105,14 @@ apps/backend/
 
 ## Implementation Status
 
-The backend structure is currently scaffolded with placeholder routes. Service implementations are marked with TODO comments and will be filled by subsequent development phases:
-
-- [ ] Walrus storage service
-- [ ] Gemini AI service with key rotation
-- [ ] MeiliSearch service
-- [ ] Somnia contracts service
-- [ ] Somnia Data Streams service
-- [ ] API key throttling service
+- [x] Walrus storage service
+- [x] Gemini AI service with key rotation
+- [x] MeiliSearch service
+- [x] Somnia contracts service
+- [x] Somnia Data Streams service
+- [x] API key throttling service
+- [x] Automated market creation and resolution
+- [x] Video indexing and conviction handling
 
 ## Technology Stack
 
