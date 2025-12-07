@@ -86,6 +86,10 @@
     "web-vitals": "^4.2.4"
   },
   "overrides": {
-    "react-is": "^19.0.0-rc-69d4b800-20241021"
+    "react-is": "^19.0.0-rc-69d4b800-20241021",
+    "connectkit": {
+      "react": "$react",
+      "react-dom": "$react-dom"
+    }
   }
 }
