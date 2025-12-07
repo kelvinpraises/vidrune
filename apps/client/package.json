@@ -88,8 +88,8 @@
   "overrides": {
     "react-is": "^19.0.0-rc-69d4b800-20241021",
     "connectkit": {
-      "react": "$react",
-      "react-dom": "$react-dom"
+      "react": "^19.0.0",
+      "react-dom": "^19.0.0"
     }
   }
 }
