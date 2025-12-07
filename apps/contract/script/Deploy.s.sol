@@ -17,7 +17,7 @@ contract DeployVidrune is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        // 1. Deploy PointsRegistry
+        // 1. Deploy PointsRegistry first and wait
         PointsRegistry pointsRegistry = new PointsRegistry();
         console.log("PointsRegistry:", address(pointsRegistry));
 
