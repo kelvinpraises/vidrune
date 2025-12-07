@@ -5,20 +5,19 @@
  * Integrates with Somnia Data Streams for real-time event emissions.
  */
 import type { Address } from "viem";
-import { useAccount, useReadContract, useWriteContract } from "wagmi";
+import { useAccount, useReadContract } from "wagmi";
 
 import {
   pointsRegistryAbi,
   predictionMarketAbi,
   videoRegistryAbi,
 } from "@/contracts/generated";
-import {
-  emitConvictionSubmitted,
-  emitMarketCreated,
-  emitMarketVote,
-  emitProcessingUpdate,
-  emitVideoIndexed,
-} from "@/services/somnia-streams";
+import { 
+  createMarketViaBackend,
+  voteOnMarketViaBackend,
+  submitVideoViaBackend,
+  submitConvictionViaBackend
+} from "@/services/backend-api";
 
 // ============================================================================
 // Contract Addresses (from .env)
@@ -51,35 +50,37 @@ export const areContractsDeployed = (): boolean => {
 // ============================================================================
 
 /**
- * Submit a new video index to the blockchain
+ * Submit a new video index via backend
+ * Backend will emit SDS event
  *
  * @example
  * const { submitVideoIndex, isPending } = useSubmitVideoIndex();
- * await submitVideoIndex('video_123', 'walrus_blob_abc');
+ * await submitVideoIndex('video_123', 'walrus_blob_abc', 'user_address', 'Video Title');
  */
 export const useSubmitVideoIndex = () => {
-  const { writeContractAsync, isPending, isSuccess, error } = useWriteContract();
   const { address } = useAccount();
+  const [isPending, setIsPending] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
 
-  const submitVideoIndex = async (videoId: string, walrusBlobId: string) => {
+  const submitVideoIndex = async (videoId: string, walrusBlobId: string, title?: string) => {
+    if (!address) throw new Error('Wallet not connected');
+    
+    setIsPending(true);
+    setError(null);
+    setIsSuccess(false);
+
     try {
-      // Step 1: Submit the video index
-      const tx = await writeContractAsync({
-        address: VIDEO_REGISTRY_ADDRESS,
-        abi: videoRegistryAbi,
-        functionName: "submitIndex",
-        args: [videoId, walrusBlobId],
-      });
-
-      // Step 2: Emit SDS event for real-time activity feed
-      if (address) {
-        await emitVideoIndexed(videoId, address);
-      }
-
-      return tx;
+      const { txHash } = await submitVideoViaBackend(videoId, walrusBlobId, address, title);
+      setIsSuccess(true);
+      return txHash;
     } catch (err) {
-      console.error("Failed to submit video index:", err);
-      throw err;
+      const error = err instanceof Error ? err : new Error('Failed to submit video');
+      setError(error);
+      console.error("Failed to submit video index:", error);
+      throw error;
+    } finally {
+      setIsPending(false);
     }
   };
 
@@ -185,29 +186,30 @@ export const getVideo = async (videoId: string) => {
 // ============================================================================
 
 /**
- * Create a new prediction market
+ * Create a new prediction market via backend
+ * Backend will create on-chain and emit SDS event
  */
 export const useCreateMarket = () => {
-  const { writeContractAsync, isPending, isSuccess, error } = useWriteContract();
+  const [isPending, setIsPending] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
 
-  const createMarket = async (videoId: string, question: string) => {
+  const createMarket = async (videoId: string, question: string, convictionIds: string[] = []) => {
+    setIsPending(true);
+    setError(null);
+    setIsSuccess(false);
+
     try {
-      const result = await writeContractAsync({
-        address: PREDICTION_MARKET_ADDRESS,
-        abi: predictionMarketAbi,
-        functionName: "createMarket",
-        args: [videoId, question],
-      });
-
-      // Emit SDS event
-      // Note: marketId is returned from the transaction, but we can't access it directly here
-      // In production, you'd listen for the MarketCreated event to get the marketId
-      await emitMarketCreated("pending", videoId, question);
-
-      return result;
+      const { marketId } = await createMarketViaBackend(videoId, question, convictionIds);
+      setIsSuccess(true);
+      return marketId;
     } catch (err) {
-      console.error("Failed to create market:", err);
-      throw err;
+      const error = err instanceof Error ? err : new Error('Failed to create market');
+      setError(error);
+      console.error("Failed to create market:", error);
+      throw error;
+    } finally {
+      setIsPending(false);
     }
   };
 
@@ -219,34 +221,35 @@ export const useCreateMarket = () => {
   };
 };
 
+import { useState } from 'react';
+
 /**
- * Vote YES on a prediction market
+ * Vote YES on a prediction market via backend
+ * Backend will emit SDS event
  */
 export const useVoteYes = () => {
-  const { writeContractAsync, isPending, isSuccess, error } = useWriteContract();
   const { address } = useAccount();
+  const [isPending, setIsPending] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
 
   const voteYes = async (marketId: string) => {
+    if (!address) throw new Error('Wallet not connected');
+    
+    setIsPending(true);
+    setError(null);
+    setIsSuccess(false);
+
     try {
-      const tx = await writeContractAsync({
-        address: PREDICTION_MARKET_ADDRESS,
-        abi: predictionMarketAbi,
-        functionName: "voteYes",
-        args: [marketId],
-      });
-
-      // Get updated vote counts for SDS event
-      // In production, listen for VoteCast event to get accurate counts
-      if (address) {
-        // Simplified: emit with placeholder counts
-        // Real implementation would fetch current counts from contract
-        await emitMarketVote(marketId, true, address, 0, 0);
-      }
-
-      return tx;
+      await voteOnMarketViaBackend(marketId, true, address);
+      setIsSuccess(true);
     } catch (err) {
-      console.error("Failed to vote YES:", err);
-      throw err;
+      const error = err instanceof Error ? err : new Error('Failed to vote YES');
+      setError(error);
+      console.error("Failed to vote YES:", error);
+      throw error;
+    } finally {
+      setIsPending(false);
     }
   };
 
@@ -259,30 +262,32 @@ export const useVoteYes = () => {
 };
 
 /**
- * Vote NO on a prediction market
+ * Vote NO on a prediction market via backend
+ * Backend will emit SDS event
  */
 export const useVoteNo = () => {
-  const { writeContractAsync, isPending, isSuccess, error } = useWriteContract();
   const { address } = useAccount();
+  const [isPending, setIsPending] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
 
   const voteNo = async (marketId: string) => {
+    if (!address) throw new Error('Wallet not connected');
+    
+    setIsPending(true);
+    setError(null);
+    setIsSuccess(false);
+
     try {
-      const tx = await writeContractAsync({
-        address: PREDICTION_MARKET_ADDRESS,
-        abi: predictionMarketAbi,
-        functionName: "voteNo",
-        args: [marketId],
-      });
-
-      // Emit SDS event
-      if (address) {
-        await emitMarketVote(marketId, false, address, 0, 0);
-      }
-
-      return tx;
+      await voteOnMarketViaBackend(marketId, false, address);
+      setIsSuccess(true);
     } catch (err) {
-      console.error("Failed to vote NO:", err);
-      throw err;
+      const error = err instanceof Error ? err : new Error('Failed to vote NO');
+      setError(error);
+      console.error("Failed to vote NO:", error);
+      throw error;
+    } finally {
+      setIsPending(false);
     }
   };
 
@@ -375,31 +380,33 @@ export const useGetUserPosition = (
 // ============================================================================
 
 /**
- * Submit a conviction (challenge) against a video
- * Note: Convictions are now stored in VideoRegistry, not a separate contract
+ * Submit a conviction (challenge) against a video via backend
+ * Backend will emit SDS event
  */
 export const useSubmitConviction = () => {
-  const { writeContractAsync, isPending, isSuccess, error } = useWriteContract();
   const { address } = useAccount();
+  const [isPending, setIsPending] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
 
-  const submitConviction = async (videoId: string, walrusBlobId: string) => {
+  const submitConviction = async (videoId: string, walrusBlobId: string, fact?: string) => {
+    if (!address) throw new Error('Wallet not connected');
+    
+    setIsPending(true);
+    setError(null);
+    setIsSuccess(false);
+
     try {
-      const result = await writeContractAsync({
-        address: VIDEO_REGISTRY_ADDRESS,
-        abi: videoRegistryAbi,
-        functionName: "submitConviction",
-        args: [videoId, walrusBlobId],
-      });
-
-      // Emit SDS event
-      if (address) {
-        await emitConvictionSubmitted(videoId, "pending", address);
-      }
-
-      return result;
+      const { txHash } = await submitConvictionViaBackend(videoId, walrusBlobId, address, fact);
+      setIsSuccess(true);
+      return txHash;
     } catch (err) {
-      console.error("Failed to submit conviction:", err);
-      throw err;
+      const error = err instanceof Error ? err : new Error('Failed to submit conviction');
+      setError(error);
+      console.error("Failed to submit conviction:", error);
+      throw error;
+    } finally {
+      setIsPending(false);
     }
   };
 
@@ -533,5 +540,6 @@ export const emitVideoProcessingUpdate = async (
     complete: "Complete",
   };
 
-  await emitProcessingUpdate(videoId, stageNames[stage], progress);
+  // TODO: Implement processing update emission
+  console.log(`Processing ${videoId}: ${stageNames[stage]} - ${progress}%`);
 };
