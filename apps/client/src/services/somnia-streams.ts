@@ -5,8 +5,28 @@
  * Subscribes to events emitted by the backend.
  */
 
-import { SDK } from '@somnia-chain/streams';
 import { createPublicClient, http } from 'viem';
+
+// Dynamic import to avoid breaking the app if SDK fails to load
+type SDKType = any;
+let SDKClass: (new (config: any) => SDKType) | null = null;
+let sdkLoadError: Error | null = null;
+
+// Attempt to load the SDK dynamically
+const loadSDK = async (): Promise<boolean> => {
+  if (SDKClass) return true;
+  if (sdkLoadError) return false;
+  
+  try {
+    const module = await import('@somnia-chain/streams');
+    SDKClass = module.SDK;
+    return true;
+  } catch (error) {
+    console.warn('Failed to load @somnia-chain/streams SDK:', error);
+    sdkLoadError = error as Error;
+    return false;
+  }
+};
 
 // ============================================================================
 // Event Types & Schemas
@@ -130,15 +150,22 @@ const somniaTestnet = {
   }
 } as const;
 
-let sdsInstance: SDK | null = null;
+let sdsInstance: SDKType | null = null;
 let isInitialized = false;
 
 /**
  * Initialize Somnia Data Streams SDK
  */
-export const initializeSDS = async () => {
+export const initializeSDS = async (): Promise<boolean> => {
   if (isInitialized && sdsInstance) {
     return true;
+  }
+
+  // First, try to load the SDK
+  const sdkLoaded = await loadSDK();
+  if (!sdkLoaded || !SDKClass) {
+    console.warn('Somnia Data Streams SDK not available - activity feed will be disabled');
+    return false;
   }
 
   try {
@@ -147,7 +174,7 @@ export const initializeSDS = async () => {
       transport: http('https://dream-rpc.somnia.network')
     });
 
-    sdsInstance = new SDK({
+    sdsInstance = new SDKClass({
       public: publicClient as any
     });
 
@@ -156,7 +183,7 @@ export const initializeSDS = async () => {
     return true;
   } catch (error) {
     console.error('Failed to initialize Somnia Data Streams:', error);
-    throw error;
+    return false;
   }
 };
 
@@ -252,10 +279,10 @@ const parseSDSEvent = (rawEvent: any): ActivityEvent | null => {
 export const subscribeToActivity = (callback: (event: ActivityEvent) => void) => {
   const setupSubscription = async () => {
     try {
-      await initializeSDS();
+      const initialized = await initializeSDS();
       
-      if (!sdsInstance) {
-        console.error('SDS not initialized');
+      if (!initialized || !sdsInstance) {
+        console.warn('SDS not available - activity feed disabled');
         return () => {};
       }
 
