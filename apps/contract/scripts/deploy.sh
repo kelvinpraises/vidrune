@@ -1,12 +1,11 @@
 #!/bin/bash
 
-# Somnia Testnet Deployment Script
-# Uses forge create (forge script not supported on Somnia)
+# Celo Testnet Deployment Script
 
 set -e
 
-RPC_URL="https://dream-rpc.somnia.network"
-CHAIN_ID="50312"
+RPC_URL="https://forno.celo-sepolia.celo-testnet.org"
+CHAIN_ID="11142220"
 
 # Check if private key is set
 if [ -z "$DEPLOYER_PRIVATE_KEY" ]; then
@@ -15,7 +14,7 @@ if [ -z "$DEPLOYER_PRIVATE_KEY" ]; then
     exit 1
 fi
 
-echo "=== Deploying to Somnia Testnet ==="
+echo "=== Deploying to Celo Testnet ==="
 echo ""
 
 # 1. Deploy PointsRegistry
