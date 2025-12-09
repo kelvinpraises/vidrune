@@ -29,7 +29,6 @@ import { FileUpload } from "@/components/molecules/file-upload";
 import StandbyButton from "@/components/molecules/standby-button";
 import { ThemeSwitcher } from "@/components/molecules/theme-switcher";
 import { UserIndexedVideos } from "@/components/organisms/user-indexed-videos";
-import { ProcessingTicker } from "@/components/organisms/processing-ticker";
 import { useVideoPipeline } from "@/hooks/use-video-pipeline";
 import { useSubmitVideoIndex, useGetUserPoints } from "@/services/contracts";
 import { useTheme } from "@/providers/theme";
@@ -686,8 +685,8 @@ function ConsoleComponent() {
                         </Card>
                       </div>
 
-                      {/* Processing Ticker - Real-time video processing status */}
-                      <ProcessingTicker />
+                      {/* Live Tracker - Placeholder for future real-time updates */}
+                      {/* TODO: Implement live tracker with alternative real-time solution */}
 
                       {/* Model Status Cards with Progress */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">

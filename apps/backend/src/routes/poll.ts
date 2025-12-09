@@ -2,7 +2,6 @@ import { Router, Request, Response } from 'express';
 import { getContractsService } from '../services/contracts';
 import { GeminiService } from '../services/gemini';
 import { throttleService } from '../services/throttle';
-import { streamsService } from '../services/streams';
 import { WalrusService } from '../services/walrus';
 import type { Conviction, MarketGroup } from '../types';
 
@@ -111,13 +110,6 @@ async function createMarketForVideo(videoId: string): Promise<number> {
           group.convictionIds
         );
 
-        // 5. Emit SDS event
-        await streamsService.emitMarketCreated({
-          marketId: txHash,
-          videoId,
-          question: group.question
-        });
-
         marketsCreated++;
         console.log(`Market created successfully: ${txHash}`);
       } catch (error) {
@@ -183,14 +175,6 @@ async function resolveMarketById(marketId: string): Promise<boolean> {
 
     // 6. Resolve on-chain
     const txHash = await contractsService.resolveMarket(marketId, verdict.verdict);
-
-    // 7. Emit SDS event
-    await streamsService.emitMarketResolved({
-      marketId,
-      winningSide: verdict.verdict,
-      yesCount: Number(market.yesVotes),
-      noCount: Number(market.noVotes)
-    });
 
     console.log(`Market ${marketId} resolved successfully: ${txHash}`);
     return true;

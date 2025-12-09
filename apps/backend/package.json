@@ -7,8 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "gen": "tsx scripts/generate-abis.ts",
-    "register-sds-schema": "tsx scripts/register-sds-schema.ts"
+    "gen": "tsx scripts/generate-abis.ts"
   },
   "keywords": [
     "vidrune",
@@ -19,7 +18,6 @@
   "license": "MIT",
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
-    "@somnia-chain/streams": "latest",
     "@types/multer": "^2.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

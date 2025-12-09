@@ -8,7 +8,7 @@ import {PredictionMarket} from "../src/PredictionMarket.sol";
 
 /**
  * @title DeployVidrune
- * @notice Deployment script for all Vidrune contracts on Somnia testnet
+ * @notice Deployment script for all Vidrune contracts on Celo Sepolia testnet
  * @dev Deploys contracts in correct order and links them together
  */
 contract DeployVidrune is Script {

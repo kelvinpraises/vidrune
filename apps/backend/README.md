@@ -1,6 +1,6 @@
 # Vidrune Backend Server
 
-Express backend server for the Vidrune video indexing platform, handling Walrus storage, Somnia smart contracts, Somnia Data Streams, and MeiliSearch operations.
+Express backend server for the Vidrune video indexing platform, handling Walrus storage, Celo smart contracts, and MeiliSearch operations.
 
 ## Setup
 
@@ -16,21 +16,16 @@ cp .env.example .env
 
 3. Configure environment variables:
    - `PORT`: Server port (default: 3001)
-   - `SOMNIA_RPC_URL`: Somnia network RPC endpoint
+   - `CELO_RPC_URL`: Celo Sepolia RPC endpoint
    - `BACKEND_WALLET_PRIVATE_KEY`: Private key for backend operations
+   - `VIDEO_REGISTRY_ADDRESS`: VideoRegistry contract address
+   - `PREDICTION_MARKET_ADDRESS`: PredictionMarket contract address
+   - `POINTS_REGISTRY_ADDRESS`: PointsRegistry contract address
    - `GEMINI_KEY_1` through `GEMINI_KEY_10`: Gemini API keys for rate limit distribution
    - `MEILISEARCH_HOST`: MeiliSearch server URL
    - `MEILISEARCH_API_KEY`: MeiliSearch API key
    - `WALRUS_PUBLISHER_URL`: Walrus publisher endpoint
    - `WALRUS_AGGREGATOR_URL`: Walrus aggregator endpoint
-   - `SDS_WEBSOCKET_URL`: (Optional) Somnia Data Streams WebSocket URL for subscriptions
-
-4. Register Somnia Data Streams schema (one-time setup):
-```bash
-npm run register-sds-schema
-```
-
-See [docs/SOMNIA_DATA_STREAMS.md](./docs/SOMNIA_DATA_STREAMS.md) for detailed SDS setup.
 
 ## Development
 
@@ -55,15 +50,15 @@ apps/backend/
 │   ├── server.ts              # Express app entry point
 │   ├── routes/                # API route handlers
 │   │   ├── storage.ts         # Walrus storage endpoints
-│   │   ├── poll.ts            # SDS polling endpoints
+│   │   ├── poll.ts            # Polling endpoints for market automation
 │   │   ├── markets.ts         # Prediction market endpoints
+│   │   ├── video.ts           # Video processing endpoints
 │   │   └── search.ts          # MeiliSearch endpoints
 │   ├── services/              # Business logic services
 │   │   ├── walrus.ts          # Walrus storage operations
 │   │   ├── gemini.ts          # Gemini AI with key rotation
 │   │   ├── meilisearch.ts     # Search indexing
-│   │   ├── contracts.ts       # Somnia contract interactions
-│   │   ├── streams.ts         # SDS WebSocket handling
+│   │   ├── contracts.ts       # Celo contract interactions
 │   │   └── throttle.ts        # API key rotation logic
 │   └── types/
 │       └── index.ts           # Shared TypeScript types
@@ -83,13 +78,7 @@ apps/backend/
 - `GET /api/storage/:blobId` - Retrieve content from Walrus
 - `GET /api/storage/:blobId/metadata` - Get blob metadata
 
-### Polling (Somnia Data Streams)
-- `GET /api/poll/status` - Get SDS connection status
-- `POST /api/poll/subscribe` - Subscribe to data feed
-- `GET /api/poll/feed/:feedId` - Get feed data
-- `POST /api/poll/unsubscribe` - Unsubscribe from feed
-
-### Markets (Somnia Contracts)
+### Markets (Celo Contracts)
 - `GET /api/markets` - List all prediction markets
 - `GET /api/markets/:marketId` - Get market details
 - `POST /api/markets` - Create new market
@@ -108,8 +97,7 @@ apps/backend/
 - [x] Walrus storage service
 - [x] Gemini AI service with key rotation
 - [x] MeiliSearch service
-- [x] Somnia contracts service
-- [x] Somnia Data Streams service
+- [x] Celo contracts service
 - [x] API key throttling service
 - [x] Automated market creation and resolution
 - [x] Video indexing and conviction handling
@@ -118,10 +106,9 @@ apps/backend/
 
 - **Express**: Web framework
 - **TypeScript**: Type safety
-- **viem**: Ethereum library for Somnia contracts
+- **viem**: Ethereum library for Celo contracts
 - **@google/generative-ai**: Gemini AI integration
 - **meilisearch**: Search engine client
-- **@somnia-chain/streams**: Somnia Data Streams client
 - **tsx**: TypeScript execution with hot reload
 
 ## Development Notes

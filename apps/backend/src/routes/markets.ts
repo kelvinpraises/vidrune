@@ -1,7 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getContractsService } from '../services/contracts';
 import { GeminiService } from '../services/gemini';
-import { streamsService } from '../services/streams';
 
 const router = Router();
 
@@ -16,7 +15,7 @@ const getGeminiService = () => {
 
 /**
  * Markets Routes
- * Handles prediction market operations via Somnia contracts
+ * Handles prediction market operations via Celo contracts
  */
 
 /**
@@ -156,13 +155,6 @@ router.post('/create', async (req: Request, res: Response) => {
       convictionIds
     );
 
-    // Emit SDS event for market creation
-    await streamsService.emitMarketCreated({
-      marketId,
-      videoId,
-      question
-    });
-
     res.status(201).json({
       success: true,
       marketId,
@@ -198,13 +190,6 @@ router.post('/video/submit', async (req: Request, res: Response) => {
     // Submit to blockchain
     const txHash = await contractsService.submitVideo(videoId, walrusBlobId);
 
-    // Emit SDS event
-    await streamsService.emitVideoIndexed({
-      videoId,
-      userId,
-      title: title || 'Untitled Video'
-    });
-
     res.status(201).json({
       success: true,
       txHash,
@@ -239,14 +224,6 @@ router.post('/video/conviction', async (req: Request, res: Response) => {
 
     // Submit conviction to blockchain
     const txHash = await contractsService.submitConviction(videoId, proofBlobId);
-
-    // Emit SDS event
-    await streamsService.emitConvictionSubmitted({
-      convictionId: txHash,
-      videoId,
-      userId,
-      fact: fact || 'Conviction submitted'
-    });
 
     res.status(201).json({
       success: true,
@@ -323,13 +300,6 @@ router.post('/:marketId/vote', async (req: Request, res: Response) => {
 
     // Note: Voting logic would typically be handled client-side via wallet
     // This endpoint can track votes or trigger backend processes
-
-    // Emit SDS event for vote
-    await streamsService.emitMarketVote({
-      marketId,
-      userId,
-      isYes
-    });
 
     res.status(200).json({
       success: true,
@@ -414,17 +384,6 @@ router.post('/:marketId/resolve', async (req: Request, res: Response) => {
 
     // Resolve market on blockchain
     const txHash = await contractsService.resolveMarket(marketId, finalWinningSide);
-
-    // Get updated market state
-    const resolvedMarket = await contractsService.getMarket(marketId);
-
-    // Emit SDS event for resolution
-    await streamsService.emitMarketResolved({
-      marketId,
-      winningSide: finalWinningSide,
-      yesCount: Number(resolvedMarket.yesVotes),
-      noCount: Number(resolvedMarket.noVotes)
-    });
 
     res.status(200).json({
       success: true,

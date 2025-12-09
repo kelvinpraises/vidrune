@@ -1,19 +1,14 @@
 /**
  * Global Activity Feed Component
  *
- * Real-time feed of all platform events using Somnia Data Streams.
+ * Real-time feed of all platform events.
  * Displays the last 50 activities with auto-scroll and live updates.
+ * 
+ * TODO: Implement real-time updates using alternative solution (WebSocket/SSE/Polling)
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/atoms/card';
-import {
-  subscribeToActivity,
-  formatRelativeTime,
-  getEventIcon,
-  getEventDescription,
-  type ActivityEvent,
-} from '@/services/somnia-streams';
 
 const MAX_ACTIVITIES = 50;
 

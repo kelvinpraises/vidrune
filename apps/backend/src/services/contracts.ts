@@ -1,7 +1,7 @@
 /**
- * Somnia Contracts Service
+ * Celo Contracts Service
  *
- * Handles interactions with Somnia testnet smart contracts
+ * Handles interactions with Celo Sepolia testnet smart contracts
  */
 
 import {
@@ -24,7 +24,7 @@ import {
 
 // Chain configuration helper - called at runtime when env vars are loaded
 function getChainConfig() {
-  const rpcUrl = process.env.SOMNIA_RPC_URL || "";
+  const rpcUrl = process.env.CELO_RPC_URL || "";
   const isLocalDev = rpcUrl.includes("localhost") || rpcUrl.includes("127.0.0.1");
 
   // Local Anvil chain configuration
@@ -43,23 +43,23 @@ function getChainConfig() {
     },
   } as const;
 
-  // Somnia testnet chain configuration
-  const somniaTestnet = {
-    id: 50312,
-    name: "Somnia Testnet",
+  // Celo Sepolia testnet chain configuration
+  const celoSepolia = {
+    id: 44787,
+    name: "Celo Sepolia Testnet",
     nativeCurrency: {
-      name: "STT",
-      symbol: "STT",
+      name: "CELO",
+      symbol: "CELO",
       decimals: 18,
     },
     rpcUrls: {
       default: {
-        http: [rpcUrl || "https://dream-rpc.somnia.network"],
+        http: [rpcUrl || "https://alfajores-forno.celo-testnet.org"],
       },
     },
   } as const;
 
-  return isLocalDev ? localAnvil : somniaTestnet;
+  return isLocalDev ? localAnvil : celoSepolia;
 }
 
 // Type definitions
@@ -97,9 +97,9 @@ interface Market {
 }
 
 /**
- * Somnia Contracts Service
+ * Celo Contracts Service
  *
- * Provides read and write access to Somnia smart contracts
+ * Provides read and write access to Celo smart contracts
  */
 export class ContractsService {
   private publicClient: PublicClient;
@@ -118,8 +118,8 @@ export class ContractsService {
 
   constructor() {
     // Validate environment variables
-    if (!process.env.SOMNIA_RPC_URL) {
-      console.warn("⚠️  SOMNIA_RPC_URL not set, using default");
+    if (!process.env.CELO_RPC_URL) {
+      console.warn("⚠️  CELO_RPC_URL not set, using default");
     }
 
     if (!process.env.BACKEND_WALLET_PRIVATE_KEY) {
@@ -149,11 +149,11 @@ export class ContractsService {
     
     // Create clients - use activeChain for automatic local/production switching
     console.log(`🔗 Using chain: ${activeChain.name} (ID: ${activeChain.id})`);
-    console.log(`   RPC URL: ${process.env.SOMNIA_RPC_URL}`);
+    console.log(`   RPC URL: ${process.env.CELO_RPC_URL}`);
     
     this.publicClient = createPublicClient({
       chain: activeChain,
-      transport: http(process.env.SOMNIA_RPC_URL),
+      transport: http(process.env.CELO_RPC_URL),
     }) as any;
 
     const account = privateKeyToAccount(
@@ -163,7 +163,7 @@ export class ContractsService {
     this.walletClient = createWalletClient({
       account,
       chain: activeChain,
-      transport: http(process.env.SOMNIA_RPC_URL),
+      transport: http(process.env.CELO_RPC_URL),
     }) as any;
 
     console.log("✅ ContractsService initialized");

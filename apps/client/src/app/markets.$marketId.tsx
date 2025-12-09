@@ -16,7 +16,6 @@ import { YesNoChart } from "@/components/organisms/yes-no-chart";
 import { usePredictionMarkets } from "@/hooks/use-prediction-markets";
 import { useVoteYes, useVoteNo, PREDICTION_MARKET_ADDRESS } from "@/services/contracts";
 import { predictionMarketAbi } from "@/contracts/generated";
-import { subscribeToMarketOdds, type MarketOdds } from "@/services/somnia-streams";
 import { ellipsisAddress, isValidUrl } from "@/utils";
 import { useParams } from "@tanstack/react-router";
 import { formatDistanceToNow } from "date-fns";
@@ -50,9 +49,6 @@ function MarketTradingPage() {
   const { voteNo, isPending: isVotingNo } = useVoteNo();
 
   const [isStaking, setIsStaking] = useState(false);
-
-  // Real-time odds from Somnia Data Streams
-  const [liveOdds, setLiveOdds] = useState<MarketOdds | null>(null);
 
   // Activities from contract
   const [activities, setActivities] = useState<
@@ -101,32 +97,7 @@ function MarketTradingPage() {
     };
 
     fetchActivities();
-  }, [marketId, liveOdds]); // Refetch when liveOdds changes (new vote)
-
-  // Subscribe to real-time market odds updates
-  useEffect(() => {
-    if (!marketId) return;
-
-    let unsubscribe: (() => void) | undefined;
-
-    const setupSubscription = async () => {
-      try {
-        const unsub = await subscribeToMarketOdds(marketId, (odds: MarketOdds) => {
-          setLiveOdds(odds);
-        });
-
-        unsubscribe = unsub;
-      } catch (error) {
-        console.error("Failed to subscribe to market odds:", error);
-      }
-    };
-
-    setupSubscription();
-
-    return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
+  }, [marketId]); // Refetch when marketId changes
     };
   }, [marketId]);
 
@@ -197,8 +168,8 @@ function MarketTradingPage() {
   };
 
   // Use real market data for chart - start from creation with 0, then current state
-  const yesPercent = liveOdds?.yesPercentage ?? market.yesPercentage;
-  const noPercent = liveOdds?.noPercentage ?? market.noPercentage;
+  const yesPercent = market.yesPercentage;
+  const noPercent = market.noPercentage;
 
   // Create time series with start point (0,0) and current state
   const createdDate = new Date(market.createdAt);
@@ -217,9 +188,9 @@ function MarketTradingPage() {
     },
   ];
 
-  // Use live vote counts if available, otherwise use actual market vote counts
-  const yesVotes = liveOdds?.yesCount ?? market.yesVotes ?? 0;
-  const noVotes = liveOdds?.noCount ?? market.noVotes ?? 0;
+  // Use actual market vote counts
+  const yesVotes = market.yesVotes ?? 0;
+  const noVotes = market.noVotes ?? 0;
 
   // Check if market is expired (voting period ended)
   const expiryTime = market.expiresAt ?? market.endDate;

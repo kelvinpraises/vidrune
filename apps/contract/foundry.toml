@@ -22,7 +22,7 @@ quote_style = "double"
 number_underscore = "thousands"
 
 [rpc_endpoints]
-somnia = "${RPC_SOMNIA}"
+celo_sepolia = "${CELO_RPC_URL}"
 
 # [etherscan]
-# somnia = { key = "${SOMNIA_EXPLORER_API_KEY}", url = "https://shannon-explorer.somnia.network/api" }
+# celo_sepolia = { key = "${CELO_EXPLORER_API_KEY}", url = "https://api-alfajores.celoscan.io/api" }

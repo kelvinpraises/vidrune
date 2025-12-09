@@ -1,8 +1,7 @@
 /**
  * Vidrune Contract Interaction Service
  *
- * Wagmi/Viem hooks for interacting with Somnia smart contracts.
- * Integrates with Somnia Data Streams for real-time event emissions.
+ * Wagmi/Viem hooks for interacting with Celo smart contracts.
  */
 import type { Address } from "viem";
 import { useAccount, useReadContract } from "wagmi";
