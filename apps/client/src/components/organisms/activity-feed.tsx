@@ -1,57 +1,49 @@
 /**
- * Global Activity Feed Component
- *
- * Real-time feed of all platform events.
- * Displays the last 50 activities with auto-scroll and live updates.
- * 
- * TODO: Implement real-time updates using alternative solution (WebSocket/SSE/Polling)
+ * TODO: Implement real-time updates using alternative solution
  */
 
-import { useRef, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/atoms/card';
+import { useRef, useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/atoms/card";
 
 const MAX_ACTIVITIES = 50;
 
+interface ActivityEvent {
+  eventType: string;
+  timestamp: number;
+  data?: any;
+}
+
+function getEventIcon(eventType: string): string {
+  const icons: Record<string, string> = {
+    video_uploaded: "🎥",
+    market_created: "📊",
+    bet_placed: "🎲",
+    market_resolved: "✅",
+    default: "📡",
+  };
+  return icons[eventType] || icons.default;
+}
+
+function getEventDescription(activity: ActivityEvent): string {
+  return `${activity.eventType} event occurred`;
+}
+
+function formatRelativeTime(timestamp: number): string {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 export function ActivityFeed() {
-  const [activities, setActivities] = useState<ActivityEvent[]>([]);
-  const [isLive, setIsLive] = useState(false);
+  const [activities] = useState<ActivityEvent[]>([]);
+  const [isLive] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
-
-  // Subscribe to activity stream
-  useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
-
-    const setupSubscription = async () => {
-      try {
-        const unsub = await subscribeToActivity((event: ActivityEvent) => {
-          setActivities((prev) => {
-            const newActivities = [event, ...prev].slice(0, MAX_ACTIVITIES);
-            return newActivities;
-          });
-
-          // Auto-scroll to top when new event arrives (if enabled)
-          if (autoScroll && containerRef.current) {
-            containerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
-          }
-        });
-
-        unsubscribe = unsub;
-        setIsLive(true);
-      } catch (error) {
-        console.error('Failed to setup activity subscription:', error);
-        setIsLive(false);
-      }
-    };
-
-    setupSubscription();
-
-    return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
-  }, [autoScroll]);
 
   // Update relative timestamps every 10 seconds
   const [, setTick] = useState(0);
@@ -83,11 +75,11 @@ export function ActivityFeed() {
             onClick={() => setAutoScroll(!autoScroll)}
             className={`text-xs px-2 py-1 rounded transition-colors ${
               autoScroll
-                ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200'
-                : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
+                ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200"
+                : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200"
             }`}
           >
-            {autoScroll ? 'Auto-scroll ON' : 'Auto-scroll OFF'}
+            {autoScroll ? "Auto-scroll ON" : "Auto-scroll OFF"}
           </button>
         </div>
       </CardHeader>
@@ -103,7 +95,7 @@ export function ActivityFeed() {
           <div
             ref={containerRef}
             className="space-y-2 max-h-96 overflow-y-auto pr-2"
-            style={{ scrollbarWidth: 'thin' }}
+            style={{ scrollbarWidth: "thin" }}
           >
             {activities.map((activity, index) => (
               <div
@@ -140,7 +132,8 @@ export function ActivityFeed() {
 
         {activities.length > 0 && (
           <div className="mt-3 pt-3 border-t border-border/50 text-center text-xs text-muted-foreground">
-            Showing {activities.length} {activities.length === 1 ? 'activity' : 'activities'}
+            Showing {activities.length}{" "}
+            {activities.length === 1 ? "activity" : "activities"}
             {activities.length >= MAX_ACTIVITIES && ` (max ${MAX_ACTIVITIES})`}
           </div>
         )}

@@ -98,8 +98,6 @@ function MarketTradingPage() {
 
     fetchActivities();
   }, [marketId]); // Refetch when marketId changes
-    };
-  }, [marketId]);
 
   if (originalLoading) {
     return (

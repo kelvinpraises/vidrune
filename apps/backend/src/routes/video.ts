@@ -1,7 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { meiliSearchService, VideoManifest } from '../services/meilisearch';
 import { getContractsService } from '../services/contracts';
-import { streamsService } from '../services/streams';
 
 const router = Router();
 
@@ -13,9 +12,7 @@ const router = Router();
 /**
  * POST /api/video/register
  * Register a video after upload to Walrus
- * This endpoint:
- * 1. Indexes video in MeiliSearch for search
- * 2. Emits SDS event
+ * This endpoint indexes video in MeiliSearch for search
  * 
  * Note: Blockchain submission is handled by the frontend via useSubmitVideoIndex()
  */
@@ -63,18 +60,6 @@ router.post('/register', async (req: Request, res: Response) => {
 
     await meiliSearchService.indexVideo(videoManifest);
     console.log(`Video ${videoId} indexed in MeiliSearch`);
-
-    // 2. Emit SDS event
-    try {
-      await streamsService.emitVideoIndexed({
-        videoId,
-        userId: metadata.uploadedBy,
-        title: metadata.title
-      });
-    } catch (sdsError) {
-      console.error('Failed to emit SDS event:', sdsError);
-      // Don't fail the request if SDS fails
-    }
 
     res.json({
       success: true,
