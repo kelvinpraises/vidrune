@@ -17,11 +17,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/atoms/dropdown-menu";
 import { useMounted } from "@/hooks/use-mounted";
+import { useMiniPay } from "@/hooks/use-minipay";
 import { ellipsisAddress } from "@/utils";
 
 export function ConnectButton() {
   const { address, isConnected, chainId, chain } = useAccount();
   const isMounted = useMounted();
+  const { isInMiniPay } = useMiniPay();
   const { disconnect } = useDisconnect();
   const { reset } = useConnect();
   const { setOpen } = useModal();
@@ -72,11 +74,14 @@ export function ConnectButton() {
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          <DropdownMenuItem onClick={handleDisconnect}>
-            Disconnect
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
+        {/* Hide disconnect option in MiniPay since wallet is managed by the app */}
+        {!isInMiniPay && (
+          <DropdownMenuGroup>
+            <DropdownMenuItem onClick={handleDisconnect}>
+              Disconnect
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

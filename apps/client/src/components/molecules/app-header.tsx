@@ -1,6 +1,10 @@
+import { useEffect } from "react";
+import { useConnect } from "wagmi";
+import { injected } from "wagmi/connectors";
 import { ThemeSwitcher } from "@/components/molecules/theme-switcher";
 import { ConnectButton } from "@/components/molecules/connect-button";
 import { Link } from "@tanstack/react-router";
+import { useMiniPay } from "@/hooks/use-minipay";
 
 interface AppHeaderProps {
   currentPage?: "datasets" | "markets";
@@ -8,6 +12,16 @@ interface AppHeaderProps {
 }
 
 export function AppHeader({ currentPage, showConnectWallet = false }: AppHeaderProps) {
+  const { isInMiniPay } = useMiniPay();
+  const { connect } = useConnect();
+
+  // Auto-connect when inside MiniPay
+  useEffect(() => {
+    if (isInMiniPay && showConnectWallet) {
+      connect({ connector: injected({ target: "metaMask" }) });
+    }
+  }, [isInMiniPay, showConnectWallet, connect]);
+
   return (
     <header className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md bg-white/10 dark:bg-[#0a0a0a]/10 flex items-center p-4 gap-4">
       <Link to="/">
@@ -47,7 +61,8 @@ export function AppHeader({ currentPage, showConnectWallet = false }: AppHeaderP
       <div className="ml-auto flex items-center gap-4">
         <ThemeSwitcher />
         {showConnectWallet ? (
-          <ConnectButton />
+          // Hide ConnectButton when inside MiniPay (wallet is auto-connected)
+          !isInMiniPay && <ConnectButton />
         ) : (
           <Link
             to="/console"

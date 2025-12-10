@@ -27,6 +27,10 @@ import { Progress } from "@/components/atoms/progress";
 import { ConnectButton } from "@/components/molecules/connect-button";
 import { FileUpload } from "@/components/molecules/file-upload";
 import StandbyButton from "@/components/molecules/standby-button";
+import { useMiniPay } from "@/hooks/use-minipay";
+import { useConnect } from "wagmi";
+import { injected } from "wagmi/connectors";
+import { useEffect } from "react";
 import { ThemeSwitcher } from "@/components/molecules/theme-switcher";
 import { UserIndexedVideos } from "@/components/organisms/user-indexed-videos";
 import { useVideoPipeline } from "@/hooks/use-video-pipeline";
@@ -49,6 +53,15 @@ function ConsoleComponent() {
 
   // Wagmi authentication
   const { address, isConnected } = useAccount();
+  const { isInMiniPay } = useMiniPay();
+  const { connect } = useConnect();
+
+  // Auto-connect when inside MiniPay
+  useEffect(() => {
+    if (isInMiniPay && !isConnected) {
+      connect({ connector: injected({ target: "metaMask" }) });
+    }
+  }, [isInMiniPay, isConnected, connect]);
 
   // Video file input
   const [selectedVideo, setSelectedVideo] = useState<File | null>(null);
