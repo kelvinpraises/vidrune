@@ -5,18 +5,14 @@
  * with a special isMiniPay flag for detection.
  */
 
-export interface MiniPayEthereum extends Window['ethereum'] {
-  isMiniPay?: boolean;
-}
-
 /**
  * Check if the app is running inside MiniPay wallet
  */
 export function isMiniPay(): boolean {
   if (typeof window === 'undefined') return false;
   
-  const ethereum = window.ethereum as MiniPayEthereum;
-  return Boolean(ethereum && ethereum.isMiniPay);
+  const ethereum = window.ethereum as any;
+  return Boolean(ethereum?.isMiniPay);
 }
 
 /**

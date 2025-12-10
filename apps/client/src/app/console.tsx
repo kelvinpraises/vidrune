@@ -30,7 +30,6 @@ import StandbyButton from "@/components/molecules/standby-button";
 import { useMiniPay } from "@/hooks/use-minipay";
 import { useConnect } from "wagmi";
 import { injected } from "wagmi/connectors";
-import { useEffect } from "react";
 import { ThemeSwitcher } from "@/components/molecules/theme-switcher";
 import { UserIndexedVideos } from "@/components/organisms/user-indexed-videos";
 import { useVideoPipeline } from "@/hooks/use-video-pipeline";
