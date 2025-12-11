@@ -13,11 +13,19 @@ interface ProcessedScene {
   processed: boolean;
 }
 
+interface FileProgress {
+  loaded: number;
+  total: number;
+}
+
 interface ModelProgress {
   status: string;
   progress?: number;
   total?: number;
   file?: string;
+  files?: Record<string, FileProgress>; // Track all files being downloaded
+  aggregateLoaded?: number;
+  aggregateTotal?: number;
 }
 
 interface PipelineState {
@@ -148,23 +156,52 @@ export const useVideoPipeline = () => {
             if (!isMounted) return;
             const { status, data } = e.data;
 
-            setPipelineState((prev) => ({
-              ...prev,
-              modelProgress: {
-                ...prev.modelProgress,
-                florence2: {
-                  status: getProgressStatus(status, data),
-                  progress: e.data.progress,
+            setPipelineState((prev) => {
+              const currentFiles = prev.modelProgress.florence2.files || {};
+              let updatedFiles = { ...currentFiles };
+              let aggregateLoaded = 0;
+              let aggregateTotal = 0;
+
+              // Update file progress if we have file info
+              if (e.data.file && e.data.total) {
+                // Calculate loaded bytes from percentage if loaded is not provided
+                const loadedBytes = e.data.loaded ?? 
+                  (e.data.progress && e.data.total ? (e.data.progress / 100) * e.data.total : 0);
+                
+                updatedFiles[e.data.file] = {
+                  loaded: loadedBytes,
                   total: e.data.total,
-                  file: e.data.file,
+                };
+              }
+
+              // Calculate aggregate progress across all files
+              Object.values(updatedFiles).forEach((fileProgress) => {
+                aggregateLoaded += fileProgress.loaded;
+                aggregateTotal += fileProgress.total;
+              });
+
+              return {
+                ...prev,
+                modelProgress: {
+                  ...prev.modelProgress,
+                  florence2: {
+                    status: getProgressStatus(status, data),
+                    progress: aggregateLoaded || e.data.loaded || 
+                      (e.data.progress && e.data.total ? (e.data.progress / 100) * e.data.total : 0),
+                    total: aggregateTotal || e.data.total,
+                    file: e.data.file,
+                    files: updatedFiles,
+                    aggregateLoaded,
+                    aggregateTotal,
+                  },
                 },
-              },
-              modelsLoaded: {
-                ...prev.modelsLoaded,
-                florence2: status === "ready" || status === "complete",
-              },
-              error: status === "error" ? `Florence2 model failed: ${data}` : prev.error,
-            }));
+                modelsLoaded: {
+                  ...prev.modelsLoaded,
+                  florence2: status === "ready" || status === "complete",
+                },
+                error: status === "error" ? `Florence2 model failed: ${data}` : prev.error,
+              };
+            });
           };
 
           florence2Service.current
@@ -180,24 +217,53 @@ export const useVideoPipeline = () => {
             if (!isMounted) return;
             const { status, data } = e.data;
 
-            setPipelineState((prev) => ({
-              ...prev,
-              modelProgress: {
-                ...prev.modelProgress,
-                kokoro: {
-                  status: getProgressStatus(status, data || e.data.device),
-                  progress: e.data.progress,
+            setPipelineState((prev) => {
+              const currentFiles = prev.modelProgress.kokoro.files || {};
+              let updatedFiles = { ...currentFiles };
+              let aggregateLoaded = 0;
+              let aggregateTotal = 0;
+
+              // Update file progress if we have file info
+              if (e.data.file && e.data.total) {
+                // Calculate loaded bytes from percentage if loaded is not provided
+                const loadedBytes = e.data.loaded ?? 
+                  (e.data.progress && e.data.total ? (e.data.progress / 100) * e.data.total : 0);
+                
+                updatedFiles[e.data.file] = {
+                  loaded: loadedBytes,
                   total: e.data.total,
-                  file: e.data.file,
+                };
+              }
+
+              // Calculate aggregate progress across all files
+              Object.values(updatedFiles).forEach((fileProgress) => {
+                aggregateLoaded += fileProgress.loaded;
+                aggregateTotal += fileProgress.total;
+              });
+
+              return {
+                ...prev,
+                modelProgress: {
+                  ...prev.modelProgress,
+                  kokoro: {
+                    status: getProgressStatus(status, data || e.data.device),
+                    progress: aggregateLoaded || e.data.loaded || 
+                      (e.data.progress && e.data.total ? (e.data.progress / 100) * e.data.total : 0),
+                    total: aggregateTotal || e.data.total,
+                    file: e.data.file,
+                    files: updatedFiles,
+                    aggregateLoaded,
+                    aggregateTotal,
+                  },
                 },
-              },
-              modelsLoaded: {
-                ...prev.modelsLoaded,
-                kokoro: status === "ready" || status === "complete",
-              },
-              error:
-                status === "error" ? `Kokoro model failed: ${e.data.error}` : prev.error,
-            }));
+                modelsLoaded: {
+                  ...prev.modelsLoaded,
+                  kokoro: status === "ready" || status === "complete",
+                },
+                error:
+                  status === "error" ? `Kokoro model failed: ${e.data.error}` : prev.error,
+              };
+            });
           };
 
           kokoroService.current

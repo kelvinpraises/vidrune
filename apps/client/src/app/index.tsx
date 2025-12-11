@@ -8,6 +8,7 @@ import { PlaceholdersAndVanishInput } from "@/components/atoms/query-input";
 import { Skeleton } from "@/components/atoms/skeleton";
 import { Tabs, TabsContent } from "@/components/atoms/tabs";
 import { AppHeader } from "@/components/molecules/app-header";
+import { HomeIntroModal } from "@/components/molecules/home-intro-modal";
 import IndexExplorerCards from "@/components/organisms/index-explorer-cards";
 import { PredictionMarketCard } from "@/components/organisms/prediction-market-card";
 import { ActivityFeed } from "@/components/organisms/activity-feed";
@@ -69,6 +70,9 @@ function HomeComponent() {
                   </div>
                 </div>
               </div>
+
+              {/* Introduction Modal */}
+              <HomeIntroModal />
 
               {/* Prediction Markets Section */}
               <div className="w-full max-w-6xl mx-auto px-4 py-16">
