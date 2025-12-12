@@ -27,6 +27,7 @@ import { Progress } from "@/components/atoms/progress";
 import { ConnectButton } from "@/components/molecules/connect-button";
 import { FileUpload } from "@/components/molecules/file-upload";
 import StandbyButton from "@/components/molecules/standby-button";
+import { NodeIntroModal } from "@/components/molecules/node-intro-modal";
 import { ThemeSwitcher } from "@/components/molecules/theme-switcher";
 import { UserIndexedVideos } from "@/components/organisms/user-indexed-videos";
 import { useVideoPipeline } from "@/hooks/use-video-pipeline";
@@ -38,6 +39,15 @@ const Globe = lazy(() => import("@/components/organisms/wrapped-globe"));
 const GLOBE_POINTS = 250;
 const CRYSTAL_TYPES = ["DePIN", "Video", "Indexes", "Network"] as const;
 const POINT_COLORS = ["red", "white", "blue", "green"] as const;
+
+// Helper to format bytes to human readable
+const formatBytes = (bytes: number): string => {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+};
 
 function ConsoleComponent() {
   const [currentView, setCurrentView] = useState<"standby" | "dashboard">("standby");
@@ -471,22 +481,24 @@ function ConsoleComponent() {
       <div className="fixed pointer-events-none inset-0 flex items-center justify-center dark:bg-black bg-white [mask-image:radial-gradient(ellipse_at_center,transparent_20%,black)]"></div>
       <div className="relative z-10 flex flex-col items-center gap-8 flex-1 w-full">
         {/* Header */}
-        <header className="flex items-center p-4 gap-4 w-full">
-          <img
-            alt="vidrune logo"
-            src="/logo-light.png"
-            width={40}
-            height={40}
-            className="relative z-10 dark:hidden"
-          />
-          <img
-            alt="vidrune logo"
-            src="/logo-dark.png"
-            width={40}
-            height={40}
-            className="relative z-10 hidden dark:block"
-          />
-          <div className="ml-auto flex items-center space-x-4">
+        <header className="flex items-center p-3 md:p-4 gap-2 md:gap-4 w-full">
+          <Link to="/" className="flex-shrink-0">
+            <img
+              alt="vidrune logo"
+              src="/logo-light.png"
+              width={32}
+              height={32}
+              className="relative z-10 dark:hidden md:w-10 md:h-10"
+            />
+            <img
+              alt="vidrune logo"
+              src="/logo-dark.png"
+              width={32}
+              height={32}
+              className="relative z-10 hidden dark:block md:w-10 md:h-10"
+            />
+          </Link>
+          <div className="ml-auto flex items-center gap-2 md:gap-4">
             <ThemeSwitcher />
             <ConnectButton />
           </div>
@@ -641,7 +653,7 @@ function ConsoleComponent() {
                       </div>
 
                       {/* Model Status Cards with Progress */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 items-start">
                         <Card className="p-4 bg-card text-card-foreground">
                           <div className="flex flex-col gap-3">
                             <div className="flex items-center justify-between">
@@ -689,34 +701,56 @@ function ConsoleComponent() {
                                   <AccordionContent className="pt-2">
                                     <div className="space-y-2">
                                       {pipelineState.modelProgress.florence2.total &&
-                                        pipelineState.modelProgress.florence2.total > 0 && (
+                                        pipelineState.modelProgress.florence2.total > 0 &&
+                                        pipelineState.modelProgress.florence2.progress ? (
                                           <div>
                                             <div className="flex justify-between text-xs mb-1">
-                                              <span>
-                                                {pipelineState.modelProgress.florence2
-                                                  .file || "Downloading..."}
+                                              <span className="text-muted-foreground">
+                                                Overall Progress
                                               </span>
-                                              <span>
-                                                {Math.round(
-                                                  ((pipelineState.modelProgress.florence2
-                                                    .progress || 0) /
-                                                    pipelineState.modelProgress.florence2
-                                                      .total) *
-                                                    100,
-                                                )}
-                                                %
+                                              <span className="flex-shrink-0 ml-2 font-mono">
+                                                {formatBytes(pipelineState.modelProgress.florence2.progress)} / {formatBytes(pipelineState.modelProgress.florence2.total)}
                                               </span>
                                             </div>
                                             <Progress
                                               value={
-                                                ((pipelineState.modelProgress.florence2
-                                                  .progress || 0) /
-                                                  pipelineState.modelProgress.florence2
-                                                    .total) *
+                                                (pipelineState.modelProgress.florence2.progress /
+                                                  pipelineState.modelProgress.florence2.total) *
                                                 100
                                               }
                                               className="h-1"
                                             />
+                                            <div className="text-xs text-muted-foreground mt-1 text-right">
+                                              {Math.round(
+                                                (pipelineState.modelProgress.florence2.progress /
+                                                  pipelineState.modelProgress.florence2.total) *
+                                                  100
+                                              )}%
+                                            </div>
+                                            {pipelineState.modelProgress.florence2.files && 
+                                              Object.keys(pipelineState.modelProgress.florence2.files).length > 0 && (
+                                              <div className="mt-3 pt-2 border-t border-border/50">
+                                                <div className="text-xs text-muted-foreground mb-1">
+                                                  Files ({Object.keys(pipelineState.modelProgress.florence2.files).length}):
+                                                </div>
+                                                <div className="space-y-1 max-h-32 overflow-y-auto">
+                                                  {Object.entries(pipelineState.modelProgress.florence2.files).map(([fileName, fileProgress]) => (
+                                                    <div key={fileName} className="flex justify-between text-xs">
+                                                      <span className="truncate max-w-[140px]" title={fileName}>
+                                                        {fileName.split('/').pop()}
+                                                      </span>
+                                                      <span className="flex-shrink-0 ml-2 font-mono text-muted-foreground">
+                                                        {formatBytes(fileProgress.loaded)} / {formatBytes(fileProgress.total)}
+                                                      </span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <div className="text-xs text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded">
+                                            ⚠️ Progress tracking unavailable for this model. Download continues in background.
                                           </div>
                                         )}
                                       <div className="text-xs text-muted-foreground">
@@ -778,31 +812,56 @@ function ConsoleComponent() {
                                   <AccordionContent className="pt-2">
                                     <div className="space-y-2">
                                       {pipelineState.modelProgress.kokoro.total &&
-                                        pipelineState.modelProgress.kokoro.total > 0 && (
+                                        pipelineState.modelProgress.kokoro.total > 0 &&
+                                        pipelineState.modelProgress.kokoro.progress ? (
                                           <div>
                                             <div className="flex justify-between text-xs mb-1">
-                                              <span>Downloading model...</span>
-                                              <span>
-                                                {Math.round(
-                                                  ((pipelineState.modelProgress.kokoro
-                                                    .progress || 0) /
-                                                    pipelineState.modelProgress.kokoro
-                                                      .total) *
-                                                    100,
-                                                )}
-                                                %
+                                              <span className="text-muted-foreground">
+                                                Overall Progress
+                                              </span>
+                                              <span className="flex-shrink-0 ml-2 font-mono">
+                                                {formatBytes(pipelineState.modelProgress.kokoro.progress)} / {formatBytes(pipelineState.modelProgress.kokoro.total)}
                                               </span>
                                             </div>
                                             <Progress
                                               value={
-                                                ((pipelineState.modelProgress.kokoro
-                                                  .progress || 0) /
-                                                  pipelineState.modelProgress.kokoro
-                                                    .total) *
+                                                (pipelineState.modelProgress.kokoro.progress /
+                                                  pipelineState.modelProgress.kokoro.total) *
                                                 100
                                               }
                                               className="h-1"
                                             />
+                                            <div className="text-xs text-muted-foreground mt-1 text-right">
+                                              {Math.round(
+                                                (pipelineState.modelProgress.kokoro.progress /
+                                                  pipelineState.modelProgress.kokoro.total) *
+                                                  100
+                                              )}%
+                                            </div>
+                                            {pipelineState.modelProgress.kokoro.files && 
+                                              Object.keys(pipelineState.modelProgress.kokoro.files).length > 0 && (
+                                              <div className="mt-3 pt-2 border-t border-border/50">
+                                                <div className="text-xs text-muted-foreground mb-1">
+                                                  Files ({Object.keys(pipelineState.modelProgress.kokoro.files).length}):
+                                                </div>
+                                                <div className="space-y-1 max-h-32 overflow-y-auto">
+                                                  {Object.entries(pipelineState.modelProgress.kokoro.files).map(([fileName, fileProgress]) => (
+                                                    <div key={fileName} className="flex justify-between text-xs">
+                                                      <span className="truncate max-w-[140px]" title={fileName}>
+                                                        {fileName.split('/').pop()}
+                                                      </span>
+                                                      <span className="flex-shrink-0 ml-2 font-mono text-muted-foreground">
+                                                        {formatBytes(fileProgress.loaded)} / {formatBytes(fileProgress.total)}
+                                                      </span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <div className="text-xs text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded">
+                                            ⚠️ Progress tracking unavailable for this model. Download continues in background.
                                           </div>
                                         )}
                                       <div className="text-xs text-muted-foreground">
@@ -1996,6 +2055,9 @@ function ConsoleComponent() {
           </p>
         </div>
       </div>
+      
+      {/* Introduction Modal */}
+      <NodeIntroModal />
     </div>
   );
 }
