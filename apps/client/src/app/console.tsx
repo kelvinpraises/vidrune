@@ -278,61 +278,76 @@ function ConsoleComponent() {
         uploadTime: Date.now(),
       };
 
-      // Merge all audio files
+      // Prepare assets for chunked upload
       const audioScenes = processedScenes.filter((s) => s.audioUrl);
       if (audioScenes.length === 0) {
         toast.error("No audio files generated. Please complete the pipeline.");
         return;
       }
 
-      // Create ZIP package
-      toast.info("Creating ZIP package...");
-      const { createVideoIndexZip } = await import("@/services/create-zip");
-      const sceneImages = processedScenes
-        .filter((s) => s.imageUrl)
-        .map((scene, index) => ({
-          imageUrl: scene.imageUrl,
-          index,
-        }));
-      const audioFiles = processedScenes
-        .filter((s) => s.audioUrl)
-        .map((scene, index) => ({
-          audioUrl: scene.audioUrl!,
-          index,
-        }));
-      const zipBlob = await createVideoIndexZip(
-        selectedVideo,
-        srtContent,
-        JSON.stringify(enrichedMetadata, null, 2),
-        sceneImages,
-        audioFiles
-      );
-
-      // Check 10 MiB limit
-      if (zipBlob.size > 10 * 1024 * 1024) {
-        toast.error(
-          `ZIP package size (${(zipBlob.size / 1024 / 1024).toFixed(
-            2
-          )} MB) exceeds 10 MB limit. Please use a shorter video.`
-        );
-        return;
+      // Fetch scene images as Blobs
+      toast.info("Preparing scene images...");
+      const sceneBlobs: Blob[] = [];
+      for (const scene of processedScenes.filter((s) => s.imageUrl)) {
+        const response = await fetch(scene.imageUrl);
+        const blob = await response.blob();
+        sceneBlobs.push(blob);
       }
 
-      toast.info(
-        `Uploading ${(zipBlob.size / 1024 / 1024).toFixed(2)} MB ZIP to storage...`
+      // Fetch audio files as Blobs
+      toast.info("Preparing audio files...");
+      const audioBlobs: Blob[] = [];
+      for (const scene of audioScenes) {
+        const response = await fetch(scene.audioUrl!);
+        const blob = await response.blob();
+        audioBlobs.push(blob);
+      }
+
+      // Upload assets individually to Walrus
+      toast.info("Uploading assets to Walrus...");
+      const { uploadVideoPackage } = await import("@/services/chunked-upload");
+      
+      const uploadResult = await uploadVideoPackage(
+        selectedVideo,
+        srtContent,
+        sceneBlobs,
+        audioBlobs,
+        {
+          videoId: `vid_${Date.now()}`,
+          title: videoMetadata.title,
+          description: videoMetadata.description,
+          uploadedBy: address || "anonymous",
+          duration: videoRef.current?.duration || 0,
+          summary: metadata.summary,
+          scenes: metadata.scenes,
+          searchableContent: metadata.searchableContent,
+          processing: {
+            captionModel: "whisper-large-v3",
+            sceneDetection: "florence-2",
+            ttsModel: "kokoro-v0.19",
+          },
+        },
+        (progress) => {
+          const stageNames = {
+            video: "Video",
+            captions: "Captions",
+            scenes: "Scenes",
+            audio: "Audio",
+            manifest: "Manifest",
+          };
+          toast.info(
+            `Uploading ${stageNames[progress.stage]}: ${progress.percentage}%`,
+            { id: "upload-progress" }
+          );
+        }
       );
 
-      // Upload ZIP to backend storage
-      const { uploadBlob } = await import("@/services/storage");
-      const zipFile = new File([zipBlob], "video-index.zip", { type: "application/zip" });
-      const uploadResult = await uploadBlob(zipFile, "video-index.zip");
-
-      if (!uploadResult.success || !uploadResult.blobId) {
+      if (!uploadResult.success || !uploadResult.manifestBlobId) {
         toast.error(`Upload failed: ${uploadResult.error || "Unknown error"}`);
         return;
       }
 
-      const blobId = uploadResult.blobId;
+      const blobId = uploadResult.manifestBlobId;
 
       // 1. Submit to blockchain first
       toast.info("Registering video on blockchain...");
@@ -375,7 +390,7 @@ function ConsoleComponent() {
 
       toast.success(`Video package uploaded and indexed! Blob ID: ${blobId}`);
       console.log("Video Blob ID:", blobId);
-      console.log("Access URL:", uploadResult.url);
+      console.log("Manifest Blob ID:", uploadResult.manifestBlobId);
     } catch (error) {
       console.error("Index upload error:", error);
       toast.error(

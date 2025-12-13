@@ -1,6 +1,5 @@
-import { unzipSync } from "fflate";
-
 import { getAllVideoIds, getVideo } from "@/services/contracts";
+import { loadManifest, getAssetUrl, type AssetManifest } from "@/services/chunked-upload";
 
 export interface VideoManifest {
   id: string;
@@ -13,94 +12,84 @@ export interface VideoManifest {
     video: string;
     captions: string;
     scenes: string[];
-    audio: string[];
+    audio: string;
   };
-  summary: string;
-  scenes: Array<{
+  summary?: string;
+  scenes?: Array<{
     description: string;
     keywords: string[];
   }>;
-  searchableContent: {
+  searchableContent?: {
     transcription: string;
     sceneDescriptions: string;
     ttsContent: string;
   };
+  duration?: number;
+  sceneCount?: number;
 }
 
 export interface VideoPackage {
   manifest: VideoManifest;
   videoUrl: string;
-  captionsText: string;
+  captionsUrl: string;
+  captionsText?: string;
   sceneUrls: string[];
-  audioUrls: string[];
+  audioZipUrl: string;
 }
 
 /**
- * Load a video package from Walrus storage
- * @param blobId - Walrus blob ID for the video package
- * @returns Video package with all assets
+ * Load a video package from Walrus storage (manifest-based)
+ * @param manifestBlobId - Walrus blob ID for the manifest.json
+ * @returns Video package with all asset URLs
  * @throws Error if blob not found or invalid
  */
-export async function loadVideoPackageFromWalrus(blobId: string): Promise<VideoPackage> {
-  // Download directly from Walrus (no backend proxy needed)
-  const { downloadFile } = await import("@/services/walrus-storage");
-  
+export async function loadVideoPackageFromWalrus(manifestBlobId: string): Promise<VideoPackage> {
   try {
-    const blob = await downloadFile(blobId);
-
-    if (!blob) {
-      throw new Error(`Blob ${blobId} not found in Walrus storage (404)`);
+    // Load manifest from Walrus
+    const assetManifest = await loadManifest(manifestBlobId);
+    
+    if (!assetManifest) {
+      throw new Error(`Manifest ${manifestBlobId} not found in Walrus storage`);
     }
 
-    const zipBuffer = await blob.arrayBuffer();
-  const decompressed = unzipSync(new Uint8Array(zipBuffer));
+    // Convert AssetManifest to VideoManifest format
+    const manifest: VideoManifest = {
+      id: assetManifest.videoId,
+      title: assetManifest.title,
+      uploadedBy: assetManifest.uploadedBy,
+      description: assetManifest.description,
+      uploadTime: assetManifest.uploadTime,
+      assetBaseUrl: "", // Not needed with direct blob IDs
+      assets: {
+        video: assetManifest.assets.video,
+        captions: assetManifest.assets.captions,
+        scenes: assetManifest.assets.scenes,
+        audio: assetManifest.assets.audio,
+      },
+      summary: assetManifest.summary,
+      scenes: assetManifest.scenes,
+      searchableContent: assetManifest.searchableContent,
+      duration: assetManifest.metadata.duration,
+      sceneCount: assetManifest.metadata.sceneCount,
+    };
 
-  // Read manifest.json from decompressed files
-  const manifestData = decompressed["manifest.json"];
-  if (!manifestData) {
-    throw new Error("Invalid package: manifest.json not found");
-  }
+    // Generate direct Walrus URLs for assets
+    const videoUrl = getAssetUrl(assetManifest.assets.video);
+    const captionsUrl = getAssetUrl(assetManifest.assets.captions);
+    const sceneUrls = assetManifest.assets.scenes.map(blobId => getAssetUrl(blobId));
+    const audioZipUrl = getAssetUrl(assetManifest.assets.audio);
 
-  const manifest: VideoManifest = JSON.parse(new TextDecoder().decode(manifestData));
-
-  // Create blob URLs from decompressed files
-  // Helper to get blob URL for a file in the zip
-  const getBlobUrl = (path: string, type: string) => {
-    const data = decompressed[path];
-    if (!data) {
-      console.warn(`Asset not found in zip: ${path}`);
-      return "";
-    }
-    const blob = new Blob([data.buffer as ArrayBuffer], { type });
-    return URL.createObjectURL(blob);
-  };
-
-  const videoUrl = getBlobUrl(manifest.assets.video || "video.mp4", "video/mp4");
-
-  const captionsData = decompressed[manifest.assets.captions || "captions.srt"];
-  const captionsText = captionsData ? new TextDecoder().decode(captionsData) : "";
-
-  // Scene URLs
-  const sceneUrls = (manifest.assets.scenes || []).map((scenePath) =>
-    getBlobUrl(scenePath, "image/png")
-  );
-
-  // Audio URLs
-  const audioUrls = (manifest.assets.audio || []).map((audioPath) =>
-    getBlobUrl(audioPath, "audio/wav")
-  );
-
-  return {
-    manifest,
-    videoUrl,
-    captionsText,
-    sceneUrls,
-    audioUrls,
-  };
+    return {
+      manifest,
+      videoUrl,
+      captionsUrl,
+      sceneUrls,
+      audioZipUrl,
+    };
   } catch (error) {
     // Re-throw with more context
     const errorMsg = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to load video package ${blobId}: ${errorMsg}`);
+    throw new Error(`Failed to load video package ${manifestBlobId}: ${errorMsg}`);
   }
 }
 

@@ -203,11 +203,9 @@ export const walrusStorage = {
    */
   async downloadFile(blobId: string, signal?: AbortSignal): Promise<Blob | null> {
     try {
-      // Use backend proxy to avoid CORS issues with Walrus
-      // Walrus blocks requests with Origin: localhost
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
-      const url = `${backendUrl}/api/storage/proxy/${blobId}`;
-      console.log(`[Walrus] Downloading via proxy: ${url}`);
+      // Download directly from Walrus
+      const url = walrusStorage.getBlobUrl(blobId);
+      console.log(`[Walrus] Downloading: ${url}`);
 
       const response = await fetch(url, {
         method: "GET",
@@ -244,154 +242,6 @@ export const walrusStorage = {
     } catch (error) {
       console.error("Failed to check blob existence:", error);
       return false;
-    }
-  },
-
-  /**
-   * Upload video package (video + metadata files)
-   */
-  async uploadVideoPackage(
-    video: File,
-    metadata: {
-      manifest: any;
-      captions?: string;
-      scenes?: Blob[];
-      ttsAudio?: Blob;
-    },
-    onProgress?: (overall: number, file: string) => void
-  ): Promise<{
-    success: boolean;
-    videoId?: string;
-    blobIds?: {
-      video: string;
-      manifest: string;
-      captions?: string;
-      ttsAudio?: string;
-      scenes?: string[];
-    };
-    error?: string;
-  }> {
-    try {
-      const blobIds: any = {};
-      let totalFiles = 1; // video
-      if (metadata.captions) totalFiles++;
-      if (metadata.ttsAudio) totalFiles++;
-      if (metadata.scenes?.length) totalFiles += metadata.scenes.length;
-      totalFiles++; // manifest
-
-      let completedFiles = 0;
-
-      // Upload video
-      const videoResult = await walrusStorage.uploadFile(video, (progress) => {
-        const overall = ((completedFiles + progress / 100) / totalFiles) * 100;
-        onProgress?.(overall, "video");
-      });
-
-      if (!videoResult.success) {
-        return {
-          success: false,
-          error: `Failed to upload video: ${videoResult.error}`,
-        };
-      }
-
-      blobIds.video = videoResult.blobId;
-      completedFiles++;
-
-      // Upload captions if exists
-      if (metadata.captions) {
-        const captionsBlob = new Blob([metadata.captions], { type: "text/plain" });
-        const captionsResult = await walrusStorage.uploadBlob(
-          captionsBlob,
-          "captions.srt",
-          (progress) => {
-            const overall = ((completedFiles + progress / 100) / totalFiles) * 100;
-            onProgress?.(overall, "captions");
-          }
-        );
-
-        if (captionsResult.success) {
-          blobIds.captions = captionsResult.blobId;
-        }
-        completedFiles++;
-      }
-
-      // Upload TTS audio if exists
-      if (metadata.ttsAudio) {
-        const ttsResult = await walrusStorage.uploadBlob(
-          metadata.ttsAudio,
-          "tts-audio.wav",
-          (progress) => {
-            const overall = ((completedFiles + progress / 100) / totalFiles) * 100;
-            onProgress?.(overall, "tts-audio");
-          }
-        );
-
-        if (ttsResult.success) {
-          blobIds.ttsAudio = ttsResult.blobId;
-        }
-        completedFiles++;
-      }
-
-      // Upload scene images
-      if (metadata.scenes?.length) {
-        blobIds.scenes = [];
-        for (let i = 0; i < metadata.scenes.length; i++) {
-          const sceneResult = await walrusStorage.uploadBlob(
-            metadata.scenes[i],
-            `scene-${String(i + 1).padStart(3, "0")}.jpg`,
-            (progress) => {
-              const overall = ((completedFiles + progress / 100) / totalFiles) * 100;
-              onProgress?.(overall, `scene-${i + 1}`);
-            }
-          );
-
-          if (sceneResult.success) {
-            blobIds.scenes.push(sceneResult.blobId);
-          }
-          completedFiles++;
-        }
-      }
-
-      // Upload manifest (includes all blob IDs)
-      const manifestData = {
-        ...metadata.manifest,
-        blobIds,
-        uploadTime: Date.now(),
-      };
-
-      const manifestBlob = new Blob([JSON.stringify(manifestData, null, 2)], {
-        type: "application/json",
-      });
-
-      const manifestResult = await walrusStorage.uploadBlob(
-        manifestBlob,
-        "manifest.json",
-        (progress) => {
-          const overall = ((completedFiles + progress / 100) / totalFiles) * 100;
-          onProgress?.(overall, "manifest");
-        }
-      );
-
-      if (!manifestResult.success) {
-        return {
-          success: false,
-          error: `Failed to upload manifest: ${manifestResult.error}`,
-        };
-      }
-
-      blobIds.manifest = manifestResult.blobId;
-
-      return {
-        success: true,
-        videoId: videoResult.blobId!,
-        blobIds,
-      };
-    } catch (error) {
-      console.error("Video package upload error:", error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      };
     }
   },
 };

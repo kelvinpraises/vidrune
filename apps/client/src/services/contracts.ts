@@ -2,21 +2,16 @@
  * Vidrune Contract Interaction Service
  *
  * Wagmi/Viem hooks for interacting with Celo smart contracts.
+ * All transactions are signed by users via their wallet.
  */
 import type { Address } from "viem";
-import { useAccount, useReadContract } from "wagmi";
+import { useReadContract, useWriteContract } from "wagmi";
 
 import {
   pointsRegistryAbi,
   predictionMarketAbi,
   videoRegistryAbi,
 } from "@/contracts/generated";
-import { 
-  createMarketViaBackend,
-  voteOnMarketViaBackend,
-  submitVideoViaBackend,
-  submitConvictionViaBackend
-} from "@/services/backend-api";
 
 // ============================================================================
 // Contract Addresses (from .env)
@@ -49,45 +44,28 @@ export const areContractsDeployed = (): boolean => {
 // ============================================================================
 
 /**
- * Submit a new video index via backend
- * Backend will emit SDS event
+ * Submit a new video index - USER SIGNS WITH WALLET
  *
  * @example
  * const { submitVideoIndex, isPending } = useSubmitVideoIndex();
- * await submitVideoIndex('video_123', 'walrus_blob_abc', 'user_address', 'Video Title');
+ * await submitVideoIndex('video_123', 'walrus_blob_abc');
  */
 export const useSubmitVideoIndex = () => {
-  const { address } = useAccount();
-  const [isPending, setIsPending] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
+  const { writeContractAsync } = useWriteContract();
 
-  const submitVideoIndex = async (videoId: string, walrusBlobId: string, title?: string) => {
-    if (!address) throw new Error('Wallet not connected');
+  const submitVideoIndex = async (videoId: string, walrusBlobId: string) => {
+    const hash = await writeContractAsync({
+      address: VIDEO_REGISTRY_ADDRESS,
+      abi: videoRegistryAbi,
+      functionName: 'submitIndex',
+      args: [videoId, walrusBlobId],
+    });
     
-    setIsPending(true);
-    setError(null);
-    setIsSuccess(false);
-
-    try {
-      const { txHash } = await submitVideoViaBackend(videoId, walrusBlobId, address, title);
-      setIsSuccess(true);
-      return txHash;
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to submit video');
-      setError(error);
-      console.error("Failed to submit video index:", error);
-      throw error;
-    } finally {
-      setIsPending(false);
-    }
+    return hash;
   };
 
   return {
     submitVideoIndex,
-    isPending,
-    isSuccess,
-    error,
   };
 };
 
@@ -185,116 +163,68 @@ export const getVideo = async (videoId: string) => {
 // ============================================================================
 
 /**
- * Create a new prediction market via backend
- * Backend will create on-chain and emit SDS event
+ * Create a new prediction market - USER SIGNS WITH WALLET
  */
 export const useCreateMarket = () => {
-  const [isPending, setIsPending] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
+  const { writeContractAsync } = useWriteContract();
 
-  const createMarket = async (videoId: string, question: string, convictionIds: string[] = []) => {
-    setIsPending(true);
-    setError(null);
-    setIsSuccess(false);
-
-    try {
-      const { marketId } = await createMarketViaBackend(videoId, question, convictionIds);
-      setIsSuccess(true);
-      return marketId;
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to create market');
-      setError(error);
-      console.error("Failed to create market:", error);
-      throw error;
-    } finally {
-      setIsPending(false);
-    }
+  const createMarket = async (videoId: string, question: string) => {
+    const hash = await writeContractAsync({
+      address: PREDICTION_MARKET_ADDRESS,
+      abi: predictionMarketAbi,
+      functionName: 'createMarket',
+      args: [videoId, question],
+    });
+    
+    return hash;
   };
 
   return {
     createMarket,
-    isPending,
-    isSuccess,
-    error,
   };
 };
 
-import { useState } from 'react';
-
 /**
- * Vote YES on a prediction market via backend
- * Backend will emit SDS event
+ * Vote YES on a prediction market - USER SIGNS WITH WALLET
  */
 export const useVoteYes = () => {
-  const { address } = useAccount();
-  const [isPending, setIsPending] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
+  const { writeContractAsync } = useWriteContract();
 
   const voteYes = async (marketId: string) => {
-    if (!address) throw new Error('Wallet not connected');
+    const hash = await writeContractAsync({
+      address: PREDICTION_MARKET_ADDRESS,
+      abi: predictionMarketAbi,
+      functionName: 'voteYes',
+      args: [marketId],
+    });
     
-    setIsPending(true);
-    setError(null);
-    setIsSuccess(false);
-
-    try {
-      await voteOnMarketViaBackend(marketId, true, address);
-      setIsSuccess(true);
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to vote YES');
-      setError(error);
-      console.error("Failed to vote YES:", error);
-      throw error;
-    } finally {
-      setIsPending(false);
-    }
+    return hash;
   };
 
   return {
     voteYes,
-    isPending,
-    isSuccess,
-    error,
   };
 };
 
 /**
- * Vote NO on a prediction market via backend
- * Backend will emit SDS event
+ * Vote NO on a prediction market - USER SIGNS WITH WALLET
  */
 export const useVoteNo = () => {
-  const { address } = useAccount();
-  const [isPending, setIsPending] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
+  const { writeContractAsync } = useWriteContract();
 
   const voteNo = async (marketId: string) => {
-    if (!address) throw new Error('Wallet not connected');
+    const hash = await writeContractAsync({
+      address: PREDICTION_MARKET_ADDRESS,
+      abi: predictionMarketAbi,
+      functionName: 'voteNo',
+      args: [marketId],
+    });
     
-    setIsPending(true);
-    setError(null);
-    setIsSuccess(false);
-
-    try {
-      await voteOnMarketViaBackend(marketId, false, address);
-      setIsSuccess(true);
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to vote NO');
-      setError(error);
-      console.error("Failed to vote NO:", error);
-      throw error;
-    } finally {
-      setIsPending(false);
-    }
+    return hash;
   };
 
   return {
     voteNo,
-    isPending,
-    isSuccess,
-    error,
   };
 };
 
@@ -379,41 +309,24 @@ export const useGetUserPosition = (
 // ============================================================================
 
 /**
- * Submit a conviction (challenge) against a video via backend
- * Backend will emit SDS event
+ * Submit a conviction (challenge) against a video - USER SIGNS WITH WALLET
  */
 export const useSubmitConviction = () => {
-  const { address } = useAccount();
-  const [isPending, setIsPending] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
+  const { writeContractAsync } = useWriteContract();
 
-  const submitConviction = async (videoId: string, walrusBlobId: string, fact?: string) => {
-    if (!address) throw new Error('Wallet not connected');
+  const submitConviction = async (videoId: string, proofBlobId: string) => {
+    const hash = await writeContractAsync({
+      address: VIDEO_REGISTRY_ADDRESS,
+      abi: videoRegistryAbi,
+      functionName: 'submitConviction',
+      args: [videoId, proofBlobId],
+    });
     
-    setIsPending(true);
-    setError(null);
-    setIsSuccess(false);
-
-    try {
-      const { txHash } = await submitConvictionViaBackend(videoId, walrusBlobId, address, fact);
-      setIsSuccess(true);
-      return txHash;
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to submit conviction');
-      setError(error);
-      console.error("Failed to submit conviction:", error);
-      throw error;
-    } finally {
-      setIsPending(false);
-    }
+    return hash;
   };
 
   return {
     submitConviction,
-    isPending,
-    isSuccess,
-    error,
   };
 };
 

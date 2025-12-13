@@ -5,4 +5,4 @@
  * with existing code that imports from walrus-client
  */
 
-export { uploadBlob as uploadToWalrus, uploadFile, uploadJSON, downloadFile, getPublicUrl } from './storage';
+export { uploadBlob as uploadToWalrus, uploadFile, downloadFile, getBlobUrl as getPublicUrl } from './walrus-storage';
