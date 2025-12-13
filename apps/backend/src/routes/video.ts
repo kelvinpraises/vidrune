@@ -1,6 +1,5 @@
-import { Router, Request, Response } from 'express';
+import { Request, Response, Router } from 'express';
 import { meiliSearchService, VideoManifest } from '../services/meilisearch';
-import { getContractsService } from '../services/contracts';
 
 const router = Router();
 

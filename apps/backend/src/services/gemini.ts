@@ -7,28 +7,40 @@
  */
 
 import { GoogleGenerativeAI, SchemaType, Part } from "@google/generative-ai";
-import { unzipSync } from "fflate";
 import { Conviction, MarketGroup, MarketResolution } from "../types";
 
 interface VideoManifest {
-  id: string;
+  version: string;
+  videoId: string;
   title: string;
   description: string;
-  summary: string;
+  uploadedBy: string;
+  uploadTime: number;
+  summary?: string;
   assets: {
     video: string;
     captions: string;
     scenes: string[];
-    audio: string[];
+    audio: string;
   };
-  scenes: Array<{
+  scenes?: Array<{
     description: string;
     keywords: string[];
   }>;
-  searchableContent: {
+  searchableContent?: {
     transcription: string;
     sceneDescriptions: string;
     ttsContent: string;
+  };
+  metadata?: {
+    duration: number;
+    sceneCount: number;
+    totalSize: number;
+    processing: {
+      captionModel: string;
+      sceneDetection: string;
+      ttsModel: string;
+    };
   };
 }
 
@@ -39,39 +51,57 @@ interface ExtractedVideoData {
 }
 
 /**
- * Fetch and extract video package from Walrus
+ * Get Walrus aggregator URL for a blob ID
  */
-async function extractVideoPackage(url: string): Promise<ExtractedVideoData> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch package: ${response.status} ${response.statusText}`);
+function getWalrusUrl(blobId: string): string {
+  const aggregatorUrl = process.env.WALRUS_AGGREGATOR_URL || 
+    "https://aggregator.walrus-testnet.walrus.space";
+  return `${aggregatorUrl}/v1/blobs/${blobId}`;
+}
+
+/**
+ * Fetch and extract video package from Walrus (new chunked format)
+ */
+async function extractVideoPackage(manifestUrl: string): Promise<ExtractedVideoData> {
+  // Fetch manifest JSON directly (no longer a ZIP)
+  const manifestResponse = await fetch(manifestUrl);
+  if (!manifestResponse.ok) {
+    throw new Error(`Failed to fetch manifest: ${manifestResponse.status} ${manifestResponse.statusText}`);
   }
 
-  const arrayBuffer = await response.arrayBuffer();
-  const decompressed = unzipSync(new Uint8Array(arrayBuffer));
+  const manifest: VideoManifest = await manifestResponse.json();
 
-  // Read manifest
-  const manifestData = decompressed["manifest.json"];
-  if (!manifestData) {
-    throw new Error("Invalid package: manifest.json not found");
-  }
-  const manifest: VideoManifest = JSON.parse(new TextDecoder().decode(manifestData));
-
-  // Extract scene images as base64
-  const sceneImages: Array<{ data: string; mimeType: string }> = [];
-  for (const scenePath of manifest.assets.scenes || []) {
-    const sceneData = decompressed[scenePath];
-    if (sceneData) {
-      sceneImages.push({
-        data: Buffer.from(sceneData).toString("base64"),
-        mimeType: "image/png",
-      });
+  // Fetch captions
+  let captions = "";
+  if (manifest.assets.captions) {
+    try {
+      const captionsUrl = getWalrusUrl(manifest.assets.captions);
+      const captionsResponse = await fetch(captionsUrl);
+      if (captionsResponse.ok) {
+        captions = await captionsResponse.text();
+      }
+    } catch (error) {
+      console.warn("Failed to fetch captions:", error);
     }
   }
 
-  // Extract captions
-  const captionsData = decompressed[manifest.assets.captions || "captions.srt"];
-  const captions = captionsData ? new TextDecoder().decode(captionsData) : "";
+  // Fetch scene images as base64
+  const sceneImages: Array<{ data: string; mimeType: string }> = [];
+  for (const sceneBlobId of manifest.assets.scenes || []) {
+    try {
+      const sceneUrl = getWalrusUrl(sceneBlobId);
+      const sceneResponse = await fetch(sceneUrl);
+      if (sceneResponse.ok) {
+        const arrayBuffer = await sceneResponse.arrayBuffer();
+        sceneImages.push({
+          data: Buffer.from(arrayBuffer).toString("base64"),
+          mimeType: "image/png",
+        });
+      }
+    } catch (error) {
+      console.warn(`Failed to fetch scene ${sceneBlobId}:`, error);
+    }
+  }
 
   return { manifest, sceneImages, captions };
 }
@@ -309,7 +339,7 @@ PROOF CONTEXT: ${proof}
 VIDEO METADATA:
 - Title: ${manifest.title}
 - Description: ${manifest.description}
-- Summary: ${manifest.summary}
+- Summary: ${manifest.summary || "No summary available"}
 
 SCENE DESCRIPTIONS:
 ${sceneDescriptions}

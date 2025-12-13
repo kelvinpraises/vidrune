@@ -1,7 +1,6 @@
 // IMPORTANT: Load environment variables FIRST, before any other imports
 // This ensures all services have access to env vars when they initialize
 import dotenv from "dotenv";
-import { resolve } from "path";
 
 const result = dotenv.config();
 
@@ -18,7 +17,6 @@ import express, { Express, NextFunction, Request, Response } from "express";
 import marketsRouter from "./routes/markets";
 import pollRouter from "./routes/poll";
 import searchRouter from "./routes/search";
-import storageRouter from "./routes/storage";
 import videoRouter from "./routes/video";
 
 const app: Express = express();
@@ -27,11 +25,11 @@ const PORT = process.env.PORT || 3001;
 // CORS Configuration
 // Allow frontend origin for API requests
 const corsOptions = {
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: process.env.FRONTEND_URL || "http://localhost:3000",
   credentials: true,
   optionsSuccessStatus: 200,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
 };
 
 // Middleware
@@ -55,7 +53,6 @@ app.get("/health", (req: Request, res: Response) => {
 });
 
 // Mount route handlers
-app.use("/api/storage", storageRouter);
 app.use("/api", pollRouter); // Mount poll routes at /api root for /api/poll-updates (must be before other /api routes)
 app.use("/api/video", videoRouter);
 app.use("/api/markets", marketsRouter);

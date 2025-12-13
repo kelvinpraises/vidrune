@@ -11,16 +11,12 @@ import {
   type Address,
   type Hash,
   type PublicClient,
-  type WalletClient
+  type WalletClient,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 // Import generated ABIs (run `npm run gen` to regenerate)
-import {
-  videoRegistryAbi,
-  predictionMarketAbi,
-  pointsRegistryAbi
-} from "../types/generated";
+import { predictionMarketAbi, videoRegistryAbi } from "../types/generated";
 
 // Chain configuration helper - called at runtime when env vars are loaded
 function getChainConfig() {
@@ -146,11 +142,11 @@ export class ContractsService {
 
     // Get chain config at runtime (after env vars are loaded)
     const activeChain = getChainConfig();
-    
+
     // Create clients - use activeChain for automatic local/production switching
     console.log(`🔗 Using chain: ${activeChain.name} (ID: ${activeChain.id})`);
     console.log(`   RPC URL: ${process.env.CELO_RPC_URL}`);
-    
+
     this.publicClient = createPublicClient({
       chain: activeChain,
       transport: http(process.env.CELO_RPC_URL),
