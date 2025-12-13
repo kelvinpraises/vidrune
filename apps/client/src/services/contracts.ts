@@ -1,7 +1,7 @@
 /**
  * Vidrune Contract Interaction Service
  *
- * Wagmi/Viem hooks for interacting with Celo smart contracts.
+ * Wagmi/Viem hooks for interacting with Story smart contracts.
  * All transactions are signed by users via their wallet.
  */
 import type { Address } from "viem";

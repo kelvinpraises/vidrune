@@ -22,7 +22,7 @@ quote_style = "double"
 number_underscore = "thousands"
 
 [rpc_endpoints]
-celo_sepolia = "${CELO_RPC_URL}"
+story_aeneid = "${STORY_RPC_URL}"
 
 # [etherscan]
-# celo_sepolia = { key = "${CELO_EXPLORER_API_KEY}", url = "https://api-alfajores.celoscan.io/api" }
+# story_aeneid = { key = "${STORY_EXPLORER_API_KEY}", url = "https://testnet.storyscan.xyz/api" }

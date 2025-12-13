@@ -1,6 +1,6 @@
 # Vidrune Backend Server
 
-Express backend server for the Vidrune video indexing platform, handling Walrus storage, Celo smart contracts, and MeiliSearch operations.
+Express backend server for the Vidrune video indexing platform, handling Walrus storage, Story smart contracts, and MeiliSearch operations.
 
 ## Setup
 
@@ -16,7 +16,7 @@ cp .env.example .env
 
 3. Configure environment variables:
    - `PORT`: Server port (default: 3001)
-   - `CELO_RPC_URL`: Celo Sepolia RPC endpoint
+   - `STORY_RPC_URL`: Story Aeneid Testnet RPC endpoint
    - `BACKEND_WALLET_PRIVATE_KEY`: Private key for backend operations
    - `VIDEO_REGISTRY_ADDRESS`: VideoRegistry contract address
    - `PREDICTION_MARKET_ADDRESS`: PredictionMarket contract address
@@ -58,7 +58,7 @@ apps/backend/
 │   │   ├── walrus.ts          # Walrus storage operations
 │   │   ├── gemini.ts          # Gemini AI with key rotation
 │   │   ├── meilisearch.ts     # Search indexing
-│   │   ├── contracts.ts       # Celo contract interactions
+│   │   ├── contracts.ts       # Story contract interactions
 │   │   └── throttle.ts        # API key rotation logic
 │   └── types/
 │       └── index.ts           # Shared TypeScript types
@@ -78,7 +78,7 @@ apps/backend/
 - `GET /api/storage/:blobId` - Retrieve content from Walrus
 - `GET /api/storage/:blobId/metadata` - Get blob metadata
 
-### Markets (Celo Contracts)
+### Markets (Story Contracts)
 - `GET /api/markets` - List all prediction markets
 - `GET /api/markets/:marketId` - Get market details
 - `POST /api/markets` - Create new market
@@ -97,7 +97,7 @@ apps/backend/
 - [x] Walrus storage service
 - [x] Gemini AI service with key rotation
 - [x] MeiliSearch service
-- [x] Celo contracts service
+- [x] Story contracts service
 - [x] API key throttling service
 - [x] Automated market creation and resolution
 - [x] Video indexing and conviction handling
@@ -106,7 +106,7 @@ apps/backend/
 
 - **Express**: Web framework
 - **TypeScript**: Type safety
-- **viem**: Ethereum library for Celo contracts
+- **viem**: Ethereum library for Story contracts
 - **@google/generative-ai**: Gemini AI integration
 - **meilisearch**: Search engine client
 - **tsx**: TypeScript execution with hot reload

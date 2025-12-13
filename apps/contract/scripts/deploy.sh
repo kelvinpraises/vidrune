@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Celo Testnet Deployment Script
+# Story Aeneid Testnet Deployment Script
 
 set -e
 
-RPC_URL="https://forno.celo-sepolia.celo-testnet.org"
-CHAIN_ID="11142220"
+RPC_URL="https://rpc.ankr.com/story_aeneid_testnet"
+CHAIN_ID="1315"
 
 # Check if private key is set
 if [ -z "$DEPLOYER_PRIVATE_KEY" ]; then
@@ -14,7 +14,7 @@ if [ -z "$DEPLOYER_PRIVATE_KEY" ]; then
     exit 1
 fi
 
-echo "=== Deploying to Celo Testnet ==="
+echo "=== Deploying to Story Aeneid Testnet ==="
 echo ""
 
 # 1. Deploy PointsRegistry

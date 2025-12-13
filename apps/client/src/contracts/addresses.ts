@@ -1,5 +1,5 @@
 /**
- * Contract addresses on Celo Sepolia testnet
+ * Contract addresses on Story Aeneid testnet
  *
  * These addresses are populated from environment variables after deployment.
  * Default to zero address until contracts are deployed.
