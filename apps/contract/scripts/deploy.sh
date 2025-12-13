@@ -87,14 +87,22 @@ sleep 2
 
 # 4. Link contracts
 echo "Linking contracts (setContracts)..."
-cast send "$POINTS_REGISTRY" \
+LINK_OUTPUT=$(cast send "$POINTS_REGISTRY" \
     "setContracts(address,address,address)" \
     "$VIDEO_REGISTRY" \
     "$PREDICTION_MARKET" \
     "0x0000000000000000000000000000000000000000" \
     --rpc-url "$RPC_URL" \
     --chain-id "$CHAIN_ID" \
-    --private-key "$DEPLOYER_PRIVATE_KEY"
+    --private-key "$DEPLOYER_PRIVATE_KEY" 2>&1)
+
+echo "$LINK_OUTPUT"
+
+if echo "$LINK_OUTPUT" | grep -q "Error"; then
+    echo "Warning: Linking failed, but contracts are deployed. You can link them manually later."
+else
+    echo "Contracts linked successfully!"
+fi
 
 echo ""
 echo "=== Deployment Complete ==="
