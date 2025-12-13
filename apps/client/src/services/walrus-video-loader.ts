@@ -1,5 +1,5 @@
 import { getAllVideoIds, getVideo } from "@/services/contracts";
-import { loadManifest, getAssetUrl, type AssetManifest } from "@/services/chunked-upload";
+import { loadManifest, getAssetUrl } from "@/services/chunked-upload";
 
 export interface VideoManifest {
   id: string;

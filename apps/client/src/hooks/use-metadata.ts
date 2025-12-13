@@ -42,7 +42,7 @@ async function fetchOnce(): Promise<MetadataTable[]> {
       id: pkg.manifest.id,
       title: pkg.manifest.title,
       description: pkg.manifest.description,
-      summary: pkg.manifest.summary,
+      summary: pkg.manifest.summary || "",
       cover: pkg.sceneUrls && pkg.sceneUrls.length > 0 ? pkg.sceneUrls[0] : "",
       uploadedBy: pkg.manifest.uploadedBy,
       createAt: new Date(pkg.manifest.uploadTime),

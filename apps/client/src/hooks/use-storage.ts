@@ -10,12 +10,13 @@ import { useState } from 'react';
 import {
   uploadFile,
   uploadBlob,
-  uploadJSON as uploadJSONService,
   downloadFile,
-  getPublicUrl,
-  type UploadResult,
-  type DownloadResult,
-} from '@/services/storage';
+  getBlobUrl,
+  type WalrusUploadResult,
+} from '@/services/walrus-storage';
+
+type UploadResult = WalrusUploadResult;
+type DownloadResult = { success: boolean; data?: Blob; error?: string };
 
 export function useStorage() {
   const [isUploading, setIsUploading] = useState(false);
@@ -28,14 +29,14 @@ export function useStorage() {
    */
   const upload = async (
     file: File,
-    filename?: string
+    onProgress?: (progress: number) => void
   ): Promise<UploadResult> => {
     setIsUploading(true);
     setError(null);
     setProgress(0);
 
     try {
-      const result = await uploadFile(file, filename);
+      const result = await uploadFile(file, onProgress);
 
       if (!result.success) {
         setError(result.error || 'Upload failed');
@@ -61,13 +62,14 @@ export function useStorage() {
    */
   const uploadBlobData = async (
     blob: Blob,
-    filename: string
+    filename: string,
+    onProgress?: (progress: number) => void
   ): Promise<UploadResult> => {
     setIsUploading(true);
     setError(null);
 
     try {
-      const result = await uploadBlob(blob, filename);
+      const result = await uploadBlob(blob, filename, onProgress);
 
       if (!result.success) {
         setError(result.error || 'Upload failed');
@@ -91,13 +93,15 @@ export function useStorage() {
    */
   const uploadJSON = async (
     data: any,
-    filename: string
+    filename: string,
+    onProgress?: (progress: number) => void
   ): Promise<UploadResult> => {
     setIsUploading(true);
     setError(null);
 
     try {
-      const result = await uploadJSONService(data, filename);
+      const jsonBlob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+      const result = await uploadBlob(jsonBlob, filename, onProgress);
 
       if (!result.success) {
         setError(result.error || 'Upload failed');
@@ -124,13 +128,11 @@ export function useStorage() {
     setError(null);
 
     try {
-      const result = await downloadFile(blobId);
-
-      if (!result.success) {
-        setError(result.error || 'Download failed');
-      }
-
-      return result;
+      const blob = await downloadFile(blobId);
+      return {
+        success: true,
+        data: blob || undefined,
+      };
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Download failed';
       setError(errorMessage);
@@ -147,7 +149,7 @@ export function useStorage() {
    * Get public URL for a blob
    */
   const getUrl = (blobId: string): string => {
-    return getPublicUrl(blobId);
+    return getBlobUrl(blobId);
   };
 
   /**

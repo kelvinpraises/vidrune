@@ -51,7 +51,7 @@ export const areContractsDeployed = (): boolean => {
  * await submitVideoIndex('video_123', 'walrus_blob_abc');
  */
 export const useSubmitVideoIndex = () => {
-  const { writeContractAsync } = useWriteContract();
+  const { writeContractAsync, isPending } = useWriteContract();
 
   const submitVideoIndex = async (videoId: string, walrusBlobId: string) => {
     const hash = await writeContractAsync({
@@ -66,6 +66,7 @@ export const useSubmitVideoIndex = () => {
 
   return {
     submitVideoIndex,
+    isPending,
   };
 };
 
@@ -166,7 +167,7 @@ export const getVideo = async (videoId: string) => {
  * Create a new prediction market - USER SIGNS WITH WALLET
  */
 export const useCreateMarket = () => {
-  const { writeContractAsync } = useWriteContract();
+  const { writeContractAsync, isPending } = useWriteContract();
 
   const createMarket = async (videoId: string, question: string) => {
     const hash = await writeContractAsync({
@@ -181,6 +182,7 @@ export const useCreateMarket = () => {
 
   return {
     createMarket,
+    isPending,
   };
 };
 
@@ -188,7 +190,7 @@ export const useCreateMarket = () => {
  * Vote YES on a prediction market - USER SIGNS WITH WALLET
  */
 export const useVoteYes = () => {
-  const { writeContractAsync } = useWriteContract();
+  const { writeContractAsync, isPending } = useWriteContract();
 
   const voteYes = async (marketId: string) => {
     const hash = await writeContractAsync({
@@ -203,6 +205,7 @@ export const useVoteYes = () => {
 
   return {
     voteYes,
+    isPending,
   };
 };
 
@@ -210,7 +213,7 @@ export const useVoteYes = () => {
  * Vote NO on a prediction market - USER SIGNS WITH WALLET
  */
 export const useVoteNo = () => {
-  const { writeContractAsync } = useWriteContract();
+  const { writeContractAsync, isPending } = useWriteContract();
 
   const voteNo = async (marketId: string) => {
     const hash = await writeContractAsync({
@@ -225,6 +228,7 @@ export const useVoteNo = () => {
 
   return {
     voteNo,
+    isPending,
   };
 };
 
@@ -312,7 +316,7 @@ export const useGetUserPosition = (
  * Submit a conviction (challenge) against a video - USER SIGNS WITH WALLET
  */
 export const useSubmitConviction = () => {
-  const { writeContractAsync } = useWriteContract();
+  const { writeContractAsync, isPending } = useWriteContract();
 
   const submitConviction = async (videoId: string, proofBlobId: string) => {
     const hash = await writeContractAsync({
@@ -327,6 +331,7 @@ export const useSubmitConviction = () => {
 
   return {
     submitConviction,
+    isPending,
   };
 };
 

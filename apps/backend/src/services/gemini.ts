@@ -69,7 +69,7 @@ async function extractVideoPackage(manifestUrl: string): Promise<ExtractedVideoD
     throw new Error(`Failed to fetch manifest: ${manifestResponse.status} ${manifestResponse.statusText}`);
   }
 
-  const manifest: VideoManifest = await manifestResponse.json();
+  const manifest = await manifestResponse.json() as VideoManifest;
 
   // Fetch captions
   let captions = "";
